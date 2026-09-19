@@ -9,7 +9,7 @@
     filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
 }
 
-/* TACHUELA / PUSHPIN 3D */
+
 .pushPin {
     position: absolute;
     top: -8px;
@@ -35,7 +35,7 @@
     filter: blur(1px);
 }
 
-/* GRUPO DE NOTAS APILADAS */
+
 .notesStack {
     display: flex;
     align-items: flex-start;
