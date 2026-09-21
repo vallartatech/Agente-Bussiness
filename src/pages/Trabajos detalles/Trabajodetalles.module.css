@@ -184,27 +184,25 @@
     background: white;
     padding: 0 0 25px 0;
     /* No padding at top for statusBar */
-    border-radius: 30px;
+    border-radius: 24px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     width: 100%;
-    border: none !important;
+    border: 1px solid #f1f5f9;
     min-height: 100px;
     display: flex;
     flex-direction: column;
     position: relative;
-    overflow: visible;
+    overflow: hidden;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-    margin-bottom: 5px;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+    margin-bottom: 16px;
     box-sizing: border-box;
-    position: sticky;
-    top: calc(15px + var(--index, 0) * 32px) !important;
-    z-index: calc(10 + var(--index, 0)) !important;
 }
 
 .jobCard:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.09);
+    border-color: #cbd5e1;
 }
 
 /* Status Bar at the very top */
@@ -2130,6 +2128,29 @@
     flex-direction: column;
     gap: 24px;
     width: 100%;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    padding-right: 6px;
+    box-sizing: border-box;
+}
+
+.rightColumn::-webkit-scrollbar {
+    width: 5px;
+}
+
+.rightColumn::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.rightColumn::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.rightColumn::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 /* SIDEBAR CARDS (RESUMEN & RECIENTES) */
@@ -2276,6 +2297,27 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.recentJobsList::-webkit-scrollbar {
+    width: 4px;
+}
+
+.recentJobsList::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.recentJobsList::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.recentJobsList::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 .recentJobItem {
@@ -2358,6 +2400,13 @@
     .dashboardGrid {
         grid-template-columns: 1fr;
         gap: 20px;
+    }
+
+    .rightColumn {
+        position: static !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding-right: 0 !important;
     }
 }
 

@@ -14,4 +14,5 @@ const PerfilEmpresa: React.FC = () => {
     );
 };
 
+export type { Equipment, LevantamientoData, LevantamientoSeccion, LevantamientoSubArea, BusinessData } from '../PerfilEmpresa/PerfilEmpresaUnificado';
 export default PerfilEmpresa;

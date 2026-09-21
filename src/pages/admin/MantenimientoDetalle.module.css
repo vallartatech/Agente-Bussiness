@@ -2,19 +2,20 @@
     display: flex;
     flex-direction: column;
     min-height: 100%;
-    padding: 30px 40px 50px;
+    padding: 15px 30px 20px;
     background: transparent;
     position: relative;
-    overflow-x: hidden;
+    overflow: hidden;
     isolation: isolate;
+    box-sizing: border-box;
 }
 
 .pageBackgroundShape1 {
     position: absolute;
-    top: -150px;
+    top: -100px;
     right: -100px;
-    width: 400px;
-    height: 400px;
+    width: 350px;
+    height: 350px;
     background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0) 70%);
     border-radius: 50%;
     z-index: 0;
@@ -24,10 +25,10 @@
 
 .pageBackgroundShape2 {
     position: absolute;
-    bottom: -200px;
-    left: -150px;
-    width: 500px;
-    height: 500px;
+    bottom: -100px;
+    left: -100px;
+    width: 350px;
+    height: 350px;
     background: radial-gradient(circle, rgba(249, 171, 15, 0.06) 0%, rgba(249, 171, 15, 0) 70%);
     border-radius: 50%;
     z-index: 0;
@@ -46,8 +47,8 @@
 .headerRow {
     display: flex;
     flex-direction: column;
-    margin-bottom: 15px;
-    gap: 10px;
+    margin-bottom: 12px;
+    gap: 8px;
 }
 
 .backBtn {
@@ -58,9 +59,9 @@
     background: white;
     color: #475569;
     border: 1px solid #e2e8f0;
-    padding: 8px 16px;
+    padding: 6px 14px;
     border-radius: 20px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -80,7 +81,7 @@
 }
 
 .pageTitle {
-    font-size: 26px;
+    font-size: 24px;
     font-weight: 800;
     color: #0f172a;
     margin: 0;
@@ -88,9 +89,9 @@
 }
 
 .statusBadge {
-    padding: 6px 16px;
+    padding: 5px 14px;
     border-radius: 20px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -105,7 +106,7 @@
 .bentoContainer {
     display: grid;
     grid-template-columns: repeat(12, 1fr);
-    gap: 20px;
+    gap: 16px;
 }
 
 /* Glassmorphism Cards */
@@ -131,7 +132,7 @@
     background: white;
     border: 1.5px solid #cbd5e1;
     border-radius: 24px;
-    padding: 20px;
+    padding: 18px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
@@ -139,9 +140,9 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 15px;
+    margin-bottom: 12px;
     border-bottom: 2px solid rgba(0,0,0,0.03);
-    padding-bottom: 10px;
+    padding-bottom: 8px;
 }
 
 .sectionIcon {
@@ -169,30 +170,30 @@
 /* Equipment Display */
 .equipmentDisplay {
     display: flex;
-    gap: 15px;
+    gap: 14px;
     align-items: center;
     background: white;
-    padding: 15px 20px;
-    border-radius: 20px;
+    padding: 12px 18px;
+    border-radius: 18px;
     border: 1.5px solid #cbd5e1;
 }
 
 .equipmentImage {
-    width: 100px;
-    height: 100px;
+    width: 85px;
+    height: 85px;
     object-fit: cover;
-    border-radius: 16px;
+    border-radius: 14px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
 }
 
 .equipmentDetails {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .equipmentName {
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 800;
     color: #0f172a;
     margin: 0;
@@ -202,13 +203,13 @@
     display: inline-flex;
     align-items: center;
     background: #f8fafc;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 8px;
-    font-size: 13px;
+    font-size: 12px;
     color: #475569;
     font-weight: 600;
     border: 1px solid #e2e8f0;
-    margin-right: 8px;
+    margin-right: 6px;
 }
 
 /* Problem Highlight */
@@ -216,28 +217,28 @@
     background: #fef2f2;
     border: 1.5px solid #cbd5e1;
     border-left: 5px solid #ef4444;
-    padding: 20px;
-    border-radius: 16px;
-    font-size: 16px;
+    padding: 12px 18px;
+    border-radius: 14px;
+    font-size: 14px;
     color: #7f1d1d;
     font-weight: 500;
     font-style: italic;
-    line-height: 1.6;
+    line-height: 1.5;
 }
 
 /* Info Grid */
 .infoGrid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    gap: 14px;
 }
 
 .infoItem {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     background: white;
-    padding: 15px;
+    padding: 10px 14px;
     border-radius: 14px;
     border: 1.5px solid #cbd5e1;
 }
@@ -251,7 +252,7 @@
 }
 
 .infoValue {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     color: #1e293b;
 }
@@ -356,6 +357,11 @@
 .delay3 { animation-delay: 0.3s; opacity: 0; }
 
 @media (max-width: 900px) {
+    .pageContainer {
+        padding: 20px 15px 120px;
+        overflow-y: auto;
+    }
+
     .bentoContainer {
         display: flex;
         flex-direction: column;

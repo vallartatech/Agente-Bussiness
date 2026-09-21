@@ -160,7 +160,6 @@ const JobCard: React.FC<JobCardProps> = ({
     return (
         <div
             className={`${styles.jobCard} ${barClass}`}
-            style={{ '--index': index } as React.CSSProperties}
             onClick={handleCardClick}
         >
             {/* Barra de estado */}

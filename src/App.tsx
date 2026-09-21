@@ -109,6 +109,7 @@ function App() {
                             <Route path="historial" element={<Historial />} />
                             <Route path="trabajo/:id" element={<TrabajoDetalle />} />
                             <Route path="trabajo-detalle/:id" element={<AdminDetalleTrabajo />} />
+                            <Route path="mantenimiento-detalle/:id" element={<MantenimientoDetalle />} />
                         </Route>
 
                         {/* TECNICO ROUTES */}
@@ -124,6 +125,7 @@ function App() {
                             <Route path="historial" element={<AdminHistorial />} />
                             <Route path="trabajo/:id" element={<TrabajoDetalle />} />
                             <Route path="trabajo-detalle/:id" element={<AdminDetalleTrabajo />} />
+                            <Route path="mantenimiento-detalle/:id" element={<MantenimientoDetalle />} />
                             <Route path="reporte-tarea/:id" element={<AdminReporte />} />
                         </Route>
 
@@ -140,6 +142,7 @@ function App() {
                             <Route path="historial" element={<AdminHistorial />} />
                             <Route path="trabajo/:id" element={<TrabajoDetalle />} />
                             <Route path="trabajo-detalle/:id" element={<AdminDetalleTrabajo />} />
+                            <Route path="mantenimiento-detalle/:id" element={<MantenimientoDetalle />} />
                             <Route path="reporte-tarea/:id" element={<AdminReporte />} />
                         </Route>
 

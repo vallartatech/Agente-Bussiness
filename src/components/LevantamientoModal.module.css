@@ -211,7 +211,30 @@
 .sectionActions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+}
+
+.secActionBtn {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.sectionItem:hover .secActionBtn {
+    opacity: 1;
+}
+
+.secActionBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
 }
 
 .secDeleteBtn {
@@ -220,6 +243,12 @@
     border: none;
     color: #94a3b8;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border-radius: 4px;
+    transition: all 0.2s;
 }
 
 .sectionItem:hover .secDeleteBtn {
@@ -227,6 +256,7 @@
 }
 
 .secDeleteBtn:hover {
+    background: rgba(239, 68, 68, 0.2);
     color: #ef4444;
 }
 
@@ -808,4 +838,157 @@
 
 .selectInput:focus {
     border-color: #3b82f6;
+}
+
+/* SUB-AREAS LAYOUT & PILLS */
+.subAreasCard {
+    width: 100%;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.subAreasHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.subAreasLabel {
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.subAreasScrollGrid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    max-height: 95px;
+    overflow-y: auto;
+    padding-right: 4px;
+    padding-bottom: 2px;
+}
+
+/* Custom sleek scrollbar */
+.subAreasScrollGrid::-webkit-scrollbar {
+    width: 5px;
+}
+.subAreasScrollGrid::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+.subAreasScrollGrid::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.subAreasScrollGrid::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.subAreaPill {
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    background: #ffffff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.subAreaPill:hover {
+    border-color: #93c5fd;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+}
+
+.subAreaPillActive {
+    background: #2563eb !important;
+    color: #ffffff !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25) !important;
+}
+
+.subAreaBadge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.subAreaPillActive .subAreaBadge {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+
+.subAreaActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 2px;
+}
+
+.subAreaActionBtn {
+    background: none;
+    border: none;
+    padding: 2px 3px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    opacity: 0.7;
+    transition: opacity 0.2s, transform 0.15s, background-color 0.2s;
+}
+
+.subAreaActionBtn:hover {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.subAreaDeleteBtn:hover {
+    color: #ef4444 !important;
+}
+
+.subAreaNewBtn {
+    padding: 5px 10px;
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px dashed #2563eb;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+}
+
+.subAreaNewBtn:hover {
+    background: #dbeafe;
+    border-color: #1d4ed8;
+    color: #1d4ed8;
 }

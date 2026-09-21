@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './LevantamientoModal.module.css';
-import { 
-    HiOutlineXMark, 
-    HiOutlinePlus, 
+import {
+    HiOutlineXMark,
+    HiOutlinePlus,
     HiOutlineTrash,
     HiOutlineFolderPlus,
     HiOutlineChevronRight,
@@ -11,9 +11,10 @@ import {
     HiOutlineCheckCircle,
     HiOutlineCamera,
     HiOutlinePhoto,
-    HiOutlineChevronLeft
+    HiOutlineChevronLeft,
+    HiOutlinePencil
 } from "react-icons/hi2";
-import type { Equipment, LevantamientoData, LevantamientoSeccion, LevantamientoSubArea } from '../pages/cliente/PerfilEmpresa';
+import type { Equipment, LevantamientoData, LevantamientoSeccion, LevantamientoSubArea } from '../pages/PerfilEmpresa/PerfilEmpresaUnificado';
 import DetalleEquipoModal from './DetalleEquipoModal';
 import { useModal } from '../context/ModalContext';
 
@@ -29,8 +30,8 @@ interface LevantamientoModalProps {
 }
 
 const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose, data, initialSectionId, onSave, isReadOnly = false, initialEquipmentId, initialSubAreaId }) => {
-    const { showConfirm } = useModal();
-    
+    const { showConfirm, showPrompt } = useModal();
+
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -51,10 +52,10 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
 
     const [isAddingSubArea, setIsAddingSubArea] = useState(false);
     const [newSubAreaName, setNewSubAreaName] = useState('');
-    
+
     const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
     const [viewingEquipment, setViewingEquipment] = useState<Equipment | null>(null);
-    
+
     const [equipmentForm, setEquipmentForm] = useState<Equipment>({
         nombre: '',
         marca: '',
@@ -95,14 +96,14 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
         if (isOpen) {
             const normalized = normalizeData(data);
             setSections(normalized);
-            
+
             // Only auto-select if nothing is currently selected or if the currently selected item no longer exists
             const isMobile = window.innerWidth <= 768;
-            
+
             setActiveSectionId(prevSecId => {
                 const secExists = normalized.find(s => s.id === prevSecId);
                 if (secExists) return prevSecId;
-                
+
                 const targetSec = initialSectionId ? normalized.find(s => s.id === initialSectionId) : (isMobile ? null : (normalized[0] || null));
                 return targetSec ? targetSec.id : null;
             });
@@ -126,7 +127,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                 if (initialSubAreaId && currentSec.subAreas?.find(sub => sub.id === initialSubAreaId)) {
                     return initialSubAreaId;
                 }
-                
+
                 return currentSec.subAreas && currentSec.subAreas.length > 0 ? currentSec.subAreas[0].id : null;
             });
         }
@@ -143,7 +144,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                         setActiveSectionId(section.id);
                         setActiveSubAreaId(sub.id);
                         setEditingEquipment(eq);
-                        setEquipmentForm({ 
+                        setEquipmentForm({
                             ...eq,
                             subAreaId: sub.id,
                             nombreSubArea: sub.nombreSubArea,
@@ -204,6 +205,24 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
         onSave(updated);
     };
 
+    const handleEditSection = (id: string, currentName: string) => {
+        showPrompt(
+            "Editar Nombre de Área",
+            "Ingresa el nuevo nombre para el área:",
+            currentName,
+            (newName: string) => {
+                if (!newName || !newName.trim()) return;
+                const cleanName = newName.trim().toUpperCase();
+                const updated = sections.map(s => s.id === id ? { ...s, nombreArea: cleanName } : s);
+                setSections(updated);
+                onSave(updated);
+            },
+            () => { },
+            "Guardar",
+            "Cancelar"
+        );
+    };
+
     const handleDeleteSection = (id: string, nombreArea: string) => {
         showConfirm(
             "¿Eliminar área?",
@@ -219,7 +238,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                 // Persistir inmediatamente en el servidor
                 onSave(updated);
             },
-            () => {},
+            () => { },
             "Sí, eliminar",
             "Cancelar"
         );
@@ -252,6 +271,39 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
         onSave(updatedSections);
     };
 
+    const handleEditSubArea = (subId: string, currentName: string) => {
+        showPrompt(
+            "Editar Nombre de Sub-área",
+            "Ingresa el nuevo nombre para la sub-área:",
+            currentName,
+            (newName: string) => {
+                if (!newName || !newName.trim()) return;
+                const cleanName = newName.trim().toUpperCase();
+                const updatedSections = sections.map(sec => {
+                    if (sec.id === activeSectionId) {
+                        const updatedSubs = (sec.subAreas || []).map(sub =>
+                            sub.id === subId ? { ...sub, nombreSubArea: cleanName } : sub
+                        );
+                        const updatedEquipos = (sec.equipos || []).map(eq =>
+                            eq.subAreaId === subId ? { ...eq, nombreSubArea: cleanName } : eq
+                        );
+                        return {
+                            ...sec,
+                            subAreas: updatedSubs,
+                            equipos: updatedEquipos
+                        };
+                    }
+                    return sec;
+                });
+                setSections(updatedSections);
+                onSave(updatedSections);
+            },
+            () => { },
+            "Guardar",
+            "Cancelar"
+        );
+    };
+
     const handleDeleteSubArea = (subId: string, nombreSubArea: string) => {
         showConfirm(
             "¿Eliminar sub-área?",
@@ -275,7 +327,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                 // Persistir inmediatamente en el servidor
                 onSave(updatedSections);
             },
-            () => {},
+            () => { },
             "Sí, eliminar",
             "Cancelar"
         );
@@ -287,7 +339,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
 
         const activeSec = sections.find(s => s.id === activeSectionId);
         let targetSubId = equipmentForm.subAreaId || activeSubAreaId;
-        
+
         // Fallback subArea if missing
         if (!targetSubId && activeSec?.subAreas && activeSec.subAreas.length > 0) {
             targetSubId = activeSec.subAreas[0].id;
@@ -364,7 +416,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                 // Persistir inmediatamente en el servidor
                 onSave(updatedSections);
             },
-            () => {},
+            () => { },
             "Sí, eliminar",
             "Cancelar"
         );
@@ -372,7 +424,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
 
     const startEditEquipment = (eq: Equipment) => {
         setEditingEquipment(eq);
-        setEquipmentForm({ 
+        setEquipmentForm({
             ...eq,
             categoria_id: eq.categoria_id || ''
         });
@@ -420,13 +472,13 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                         <h3 className={styles.modalTitle}>Levantamientos por Áreas y Sub-áreas</h3>
                         <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Gestiona la estructura de áreas, sub-áreas y catálogo de equipos/activos.</p>
                     </div>
-                    <button 
-                        className={styles.closeButton} 
-                        onClick={(e) => { 
+                    <button
+                        className={styles.closeButton}
+                        onClick={(e) => {
                             e.preventDefault();
-                            e.stopPropagation(); 
-                            onClose(); 
-                        }} 
+                            e.stopPropagation();
+                            onClose();
+                        }}
                         title="Cerrar"
                         type="button"
                     >
@@ -445,10 +497,10 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                 </button>
                             )}
                         </div>
-                        
+
                         {isAddingSection && (
                             <div className={styles.newSectionInput}>
-                                <input 
+                                <input
                                     autoFocus
                                     placeholder="Nombre del área (Ej: COCINA)..."
                                     value={newSectionName}
@@ -464,8 +516,8 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
 
                         <div className={styles.sectionsList}>
                             {sections.map((s: LevantamientoSeccion) => (
-                                <div 
-                                    key={s.id} 
+                                <div
+                                    key={s.id}
                                     className={`${styles.sectionItem} ${activeSectionId === s.id ? styles.sectionItemActive : ''}`}
                                     onClick={() => {
                                         if (activeSectionId !== s.id) {
@@ -479,9 +531,22 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                     <span className={styles.sectionName}>📂 {s.nombreArea}</span>
                                     <div className={styles.sectionActions}>
                                         {!isReadOnly && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteSection(s.id, s.nombreArea); }} className={styles.secDeleteBtn} title="Borrar Área">
-                                                <HiOutlineTrash size={16} color="#94a3b8" />
-                                            </button>
+                                            <>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleEditSection(s.id, s.nombreArea); }}
+                                                    className={styles.secActionBtn}
+                                                    title="Editar Nombre del Área"
+                                                >
+                                                    <HiOutlinePencil size={15} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteSection(s.id, s.nombreArea); }}
+                                                    className={`${styles.secActionBtn} ${styles.secDeleteBtn}`}
+                                                    title="Borrar Área"
+                                                >
+                                                    <HiOutlineTrash size={15} />
+                                                </button>
+                                            </>
                                         )}
                                         <HiOutlineChevronRight className={styles.chevron} size={14} color="#cbd5e1" />
                                     </div>
@@ -500,8 +565,8 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                     <div className={`${styles.mainContent} ${!activeSectionId ? styles.mobileHidden : ''}`}>
                         {activeSection ? (
                             <>
-                                <button 
-                                    className={styles.mobileBackBtn} 
+                                <button
+                                    className={styles.mobileBackBtn}
                                     onClick={() => setActiveSectionId(null)}
                                 >
                                     <HiOutlineChevronLeft size={18} /> Volver a Áreas
@@ -515,74 +580,77 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                         <span className={styles.badge}>{activeSection.equipos.length} equipos totales</span>
                                     </div>
 
-                                    {/* BARRA DE SUB-ÁREAS */}
-                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', width: '100%', alignItems: 'center', background: '#f8fafc', padding: '10px 12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginRight: '4px' }}>Sub-áreas:</span>
-                                        
-                                        {activeSubAreas.map((sub) => (
-                                            <div 
-                                                key={sub.id} 
-                                                onClick={() => {
-                                                    setActiveSubAreaId(sub.id);
-                                                    resetEquipmentForm(sub.id);
-                                                }}
-                                                style={{
-                                                    padding: '5px 12px',
-                                                    borderRadius: '8px',
-                                                    fontSize: '12px',
-                                                    fontWeight: '700',
-                                                    cursor: 'pointer',
-                                                    background: activeSubAreaId === sub.id ? '#2563eb' : '#ffffff',
-                                                    color: activeSubAreaId === sub.id ? '#ffffff' : '#334155',
-                                                    border: activeSubAreaId === sub.id ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                            >
-                                                <span>🔹 {sub.nombreSubArea}</span>
-                                                <span style={{ fontSize: '10px', background: activeSubAreaId === sub.id ? 'rgba(255,255,255,0.25)' : '#e2e8f0', padding: '1px 6px', borderRadius: '10px' }}>
-                                                    {sub.equipos.length}
-                                                </span>
-                                                {!isReadOnly && activeSubAreas.length > 1 && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteSubArea(sub.id, sub.nombreSubArea);
-                                                        }}
-                                                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: activeSubAreaId === sub.id ? '#ffffff' : '#ef4444', display: 'flex' }}
-                                                        title="Eliminar Sub-área"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                )}
-                                            </div>
-                                        ))}
+                                    {/* BARRA DE SUB-ÁREAS EN FILAS CON SCROLL */}
+                                    <div className={styles.subAreasCard}>
+                                        <div className={styles.subAreasHeader}>
+                                            <span className={styles.subAreasLabel}>
+                                                <span>🔹</span> Sub-áreas disponibles ({activeSubAreas.length}):
+                                            </span>
+                                            {!isReadOnly && !isAddingSubArea && (
+                                                <button
+                                                    onClick={() => setIsAddingSubArea(true)}
+                                                    className={styles.subAreaNewBtn}
+                                                >
+                                                    <HiOutlinePlus size={14} /> Nueva Sub-área
+                                                </button>
+                                            )}
+                                        </div>
 
-                                        {!isReadOnly && (
-                                            isAddingSubArea ? (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <input 
+                                        <div className={styles.subAreasScrollGrid}>
+                                            {activeSubAreas.map((sub) => {
+                                                const isActive = activeSubAreaId === sub.id;
+                                                return (
+                                                    <div
+                                                        key={sub.id}
+                                                        onClick={() => {
+                                                            setActiveSubAreaId(sub.id);
+                                                            resetEquipmentForm(sub.id);
+                                                        }}
+                                                        className={`${styles.subAreaPill} ${isActive ? styles.subAreaPillActive : ''}`}
+                                                    >
+                                                        <span>{sub.nombreSubArea}</span>
+                                                        <span className={styles.subAreaBadge}>
+                                                            {sub.equipos.length}
+                                                        </span>
+                                                        {!isReadOnly && (
+                                                            <div className={styles.subAreaActions} onClick={e => e.stopPropagation()}>
+                                                                <button
+                                                                    onClick={() => handleEditSubArea(sub.id, sub.nombreSubArea)}
+                                                                    className={styles.subAreaActionBtn}
+                                                                    title="Editar Sub-área"
+                                                                >
+                                                                    <HiOutlinePencil size={13} />
+                                                                </button>
+                                                                {activeSubAreas.length > 1 && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteSubArea(sub.id, sub.nombreSubArea)}
+                                                                        className={`${styles.subAreaActionBtn} ${styles.subAreaDeleteBtn}`}
+                                                                        title="Eliminar Sub-área"
+                                                                    >
+                                                                        <HiOutlineTrash size={13} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {!isReadOnly && isAddingSubArea && (
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#ffffff', padding: '3px 6px', borderRadius: '8px', border: '1px solid #2563eb' }}>
+                                                    <input
                                                         autoFocus
                                                         placeholder="Nombre de sub-área..."
                                                         value={newSubAreaName}
                                                         onChange={e => setNewSubAreaName(e.target.value.toUpperCase())}
                                                         onKeyDown={e => e.key === 'Enter' && handleAddSubArea()}
-                                                        style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '12px', outline: 'none' }}
+                                                        style={{ padding: '3px 6px', borderRadius: '4px', border: 'none', fontSize: '12px', outline: 'none', fontWeight: 600, width: '140px' }}
                                                     />
-                                                    <button onClick={handleAddSubArea} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}>✓</button>
-                                                    <button onClick={() => setIsAddingSubArea(false)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                                                    <button onClick={handleAddSubArea} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}>✓</button>
+                                                    <button onClick={() => setIsAddingSubArea(false)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                                                 </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={() => setIsAddingSubArea(true)}
-                                                    style={{ padding: '5px 10px', background: '#eff6ff', color: '#2563eb', border: '1px dashed #2563eb', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                >
-                                                    <HiOutlinePlus size={14} /> Nueva Sub-área
-                                                </button>
-                                            )
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -682,49 +750,49 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
 
                                             <div className={styles.inputGroup}>
                                                 <label>Nombre del Equipo</label>
-                                                <input 
+                                                <input
                                                     value={equipmentForm.nombre || ''}
-                                                    onChange={e => setEquipmentForm({...equipmentForm, nombre: e.target.value.toUpperCase()})}
+                                                    onChange={e => setEquipmentForm({ ...equipmentForm, nombre: e.target.value.toUpperCase() })}
                                                     placeholder="EJ: ESTUFA 4 QUEMADORES"
                                                 />
                                             </div>
                                             <div className={styles.inputGroup}>
                                                 <label>Marca</label>
-                                                <input 
+                                                <input
                                                     value={equipmentForm.marca || ''}
-                                                    onChange={e => setEquipmentForm({...equipmentForm, marca: e.target.value.toUpperCase()})}
+                                                    onChange={e => setEquipmentForm({ ...equipmentForm, marca: e.target.value.toUpperCase() })}
                                                     placeholder="EJ: CORIAT"
                                                 />
                                             </div>
                                             <div className={styles.inputGroup}>
                                                 <label>Modelo</label>
-                                                <input 
+                                                <input
                                                     value={equipmentForm.modelo || ''}
-                                                    onChange={e => setEquipmentForm({...equipmentForm, modelo: e.target.value.toUpperCase()})}
+                                                    onChange={e => setEquipmentForm({ ...equipmentForm, modelo: e.target.value.toUpperCase() })}
                                                     placeholder="EJ: MASTER 4"
                                                 />
                                             </div>
                                             <div className={styles.inputGroup}>
                                                 <label>Número de Serie</label>
-                                                <input 
+                                                <input
                                                     value={equipmentForm.serie || ''}
-                                                    onChange={e => setEquipmentForm({...equipmentForm, serie: e.target.value.toUpperCase()})}
+                                                    onChange={e => setEquipmentForm({ ...equipmentForm, serie: e.target.value.toUpperCase() })}
                                                     placeholder="EJ: SN-45892"
                                                 />
                                             </div>
                                             <div className={styles.inputGroup}>
                                                 <label>Año Fabricación</label>
-                                                <input 
+                                                <input
                                                     value={equipmentForm.anioFabricacion || ''}
-                                                    onChange={e => setEquipmentForm({...equipmentForm, anioFabricacion: e.target.value.toUpperCase()})}
+                                                    onChange={e => setEquipmentForm({ ...equipmentForm, anioFabricacion: e.target.value.toUpperCase() })}
                                                     placeholder="EJ: 2020"
                                                 />
                                             </div>
                                             <div className={styles.inputGroup}>
                                                 <label>Años en uso</label>
-                                                <input 
+                                                <input
                                                     value={equipmentForm.anioUso || ''}
-                                                    onChange={e => setEquipmentForm({...equipmentForm, anioUso: e.target.value.toUpperCase()})}
+                                                    onChange={e => setEquipmentForm({ ...equipmentForm, anioUso: e.target.value.toUpperCase() })}
                                                     placeholder="EJ: 4 AÑOS"
                                                 />
                                             </div>
@@ -733,12 +801,12 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                                     <div>
                                                         <label>Foto del Equipo</label>
                                                         <div className={styles.photoUploadWrapper}>
-                                                            <input 
-                                                                type="file" 
-                                                                accept="image/*" 
-                                                                ref={fileInputRef} 
-                                                                style={{ display: 'none' }} 
-                                                                onChange={handlePhotoChange} 
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                ref={fileInputRef}
+                                                                style={{ display: 'none' }}
+                                                                onChange={handlePhotoChange}
                                                             />
                                                             <button className={styles.photoBtn} onClick={() => fileInputRef.current?.click()} type="button">
                                                                 {equipmentForm.foto ? <HiOutlinePhoto size={20} color="#475569" /> : <HiOutlineCamera size={20} color="#475569" />}
@@ -758,12 +826,12 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                                     <div>
                                                         <label>Foto de Placa de Datos</label>
                                                         <div className={styles.photoUploadWrapper}>
-                                                            <input 
-                                                                type="file" 
-                                                                accept="image/*" 
-                                                                ref={fileInputPlacaRef} 
-                                                                style={{ display: 'none' }} 
-                                                                onChange={handlePlacaPhotoChange} 
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                ref={fileInputPlacaRef}
+                                                                style={{ display: 'none' }}
+                                                                onChange={handlePlacaPhotoChange}
                                                             />
                                                             <button className={styles.photoBtn} onClick={() => fileInputPlacaRef.current?.click()} type="button">
                                                                 {equipmentForm.fotoPlaca ? <HiOutlinePhoto size={20} color="#475569" /> : <HiOutlineCamera size={20} color="#475569" />}
@@ -784,8 +852,8 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                         </div>
                                         <div className={styles.formFooter}>
                                             {editingEquipment && <button onClick={() => resetEquipmentForm()} className={styles.btnCancel}>Cancelar</button>}
-                                            <button 
-                                                onClick={handleAddOrUpdateEquipment} 
+                                            <button
+                                                onClick={handleAddOrUpdateEquipment}
                                                 className={styles.btnAddEq}
                                                 disabled={!equipmentForm.nombre || !equipmentForm.marca}
                                             >
@@ -794,7 +862,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                                         </div>
                                     </div>
                                 )}
-                                
+
                                 {/* BOTÓN GUARDAR LEVANTAMIENTO EN EL CONTENIDO */}
                                 <div className={styles.contentSaveContainer}>
                                     {!isReadOnly ? (
@@ -819,7 +887,7 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
                         )}
                     </div>
                 </div>
-                <DetalleEquipoModal 
+                <DetalleEquipoModal
                     isOpen={!!viewingEquipment}
                     onClose={() => setViewingEquipment(null)}
                     equipment={viewingEquipment}
