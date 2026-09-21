@@ -44,6 +44,18 @@ export const asignarMantenimientoReparacion = async (id: string, data: any) => {
     return res.data;
 };
 
+// Reasignar / actualizar datos del técnico o fecha
+export const actualizarMantenimientoAsignacion = async (id: string | number, data: any) => {
+    const res = await api.post(`/mantenimiento-solicitudes/${id}/actualizar-asignacion`, data);
+    return res.data;
+};
+
+// Cancelar la asignación (volver a Pendiente o Cotización Aceptada y eliminar trabajo asignado)
+export const cancelarMantenimientoAsignacion = async (id: string | number) => {
+    const res = await api.post(`/mantenimiento-solicitudes/${id}/cancelar-asignacion`);
+    return res.data;
+};
+
 export const getConsumoReporte = async () => {
     const res = await api.get('/equipos-consumo');
     return res.data;

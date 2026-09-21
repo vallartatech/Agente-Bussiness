@@ -257,6 +257,151 @@
     color: #1e293b;
 }
 
+/* Business & Client Card */
+.businessCard {
+    background: white;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 18px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.businessHeader {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.businessLogo {
+    width: 65px;
+    height: 65px;
+    border-radius: 14px;
+    object-fit: cover;
+    border: 1.5px solid #e2e8f0;
+    background: #f8fafc;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.businessLogoPlaceholder {
+    width: 65px;
+    height: 65px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 26px;
+    flex-shrink: 0;
+    border: 1.5px solid #e2e8f0;
+}
+
+.businessInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-grow: 1;
+}
+
+.businessName {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.businessSub {
+    font-size: 13px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.addressBox {
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.addressLeft {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-grow: 1;
+}
+
+.addressIcon {
+    color: #ef4444;
+    font-size: 18px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.addressText {
+    font-size: 13px;
+    color: #1e293b;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.mapLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #2563eb;
+    background: #eff6ff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #bfdbfe;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.mapLink:hover {
+    background: #dbeafe;
+    transform: translateY(-1px);
+}
+
+.clientDetailsRow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    padding-top: 6px;
+    border-top: 1px solid #f1f5f9;
+}
+
+.clientDetailItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #475569;
+}
+
+.clientDetailIcon {
+    color: #3b82f6;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
 /* Forms */
 .formGroup {
     display: flex;
@@ -334,6 +479,125 @@
 
 .successBtn:hover:not(:disabled) {
     box-shadow: 0 15px 25px rgba(16, 185, 129, 0.3);
+}
+
+.assignedBox {
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.assignedItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.assignedIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.assignedDetails {
+    display: flex;
+    flex-direction: column;
+}
+
+.assignedLabel {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.assignedVal {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.actionButtonGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.editBtn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: white;
+    color: #2563eb;
+    border: 1.5px solid #bfdbfe;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.editBtn:hover:not(:disabled) {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+}
+
+.dangerBtn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: white;
+    color: #dc2626;
+    border: 1.5px solid #fecaca;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.dangerBtn:hover:not(:disabled) {
+    background: #fef2f2;
+    border-color: #ef4444;
+    transform: translateY(-1px);
+}
+
+.secondaryBtn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.secondaryBtn:hover:not(:disabled) {
+    background: #e2e8f0;
+    color: #1e293b;
 }
 
 /* Animations */

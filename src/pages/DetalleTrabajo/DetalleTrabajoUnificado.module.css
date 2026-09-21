@@ -2327,6 +2327,8 @@
     top: 0;
     right: 0;
     bottom: 0;
+    height: 100vh;
+    max-height: 100vh;
     width: min(92vw, 470px);
     background: #f8fafc;
     box-shadow: -10px 0 35px rgba(0, 0, 0, 0.18);
@@ -2335,6 +2337,8 @@
     flex-direction: column;
     transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     border-left: 1.5px solid #e2e8f0;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .techDrawerHeader {
@@ -2345,15 +2349,17 @@
     align-items: center;
     justify-content: space-between;
     box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    flex-shrink: 0;
 }
 
 .techDrawerContent {
     flex: 1;
     overflow-y: auto;
-    padding: 18px 16px 30px;
+    padding: 18px 16px 90px;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    box-sizing: border-box;
 }
 
 .techDrawerDesktopTrigger {

@@ -490,7 +490,7 @@ export const generateMaintenanceReportPDF = async (data: PDFReportData, returnBl
                 currentY += imgSize + 15;
             }
 
-            if (obsListToRender && obsListToRender.length > 0) {
+            if (!data.isVisita && obsListToRender && obsListToRender.length > 0) {
                 if (currentY > 240) {
                     doc.addPage();
                     drawHeader("TESTIGOS FOTOGRÁFICOS");

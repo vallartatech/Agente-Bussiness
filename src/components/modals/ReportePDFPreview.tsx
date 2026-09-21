@@ -712,7 +712,9 @@ export default function ReportePDFPreview({ trabajo, reporteData, subTareas, isV
                         </h4>
                         <p style={{ margin: 0, fontSize: '12px', color: '#475569', whiteSpace: 'pre-wrap' }}>
                             {isVisita 
-                                ? (getCleanNotes(reporteData.materiales) || 'Sin detalles o notas adicionales.')
+                                ? ((reporteData.observaciones && reporteData.observaciones !== 'Sin observaciones' && reporteData.observaciones !== 'N/A') 
+                                    ? reporteData.observaciones 
+                                    : (getCleanNotes(reporteData.materiales) || 'Sin detalles o notas adicionales.'))
                                 : (hasObs 
                                     ? 'Se anexan reportes fotográficos y observaciones en la hoja de Testigos Fotográficos.'
                                     : 'Sin observaciones adicionales.')
@@ -1010,58 +1012,60 @@ export default function ReportePDFPreview({ trabajo, reporteData, subTareas, isV
                             </div>
                         )}
 
-                        {/* 3. OBSERVACIONES ADICIONALES (Lista estructurada por bloques) */}
-                        {reporteData.observacionesList && reporteData.observacionesList.length > 0 ? (
-                            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <h5 style={{ margin: '0 0 4px 0', fontSize: '11px', fontWeight: '800', color: '#1e293b', textTransform: 'uppercase' }}>
-                                    Observaciones Adicionales ({reporteData.observacionesList.length})
-                                </h5>
-                                {reporteData.observacionesList.map((obs, idx) => {
-                                    const imgs = (obs.imagenes && Array.isArray(obs.imagenes) ? obs.imagenes : (obs.foto ? [obs.foto] : [])).filter(Boolean);
-                                    return (
-                                        <div key={obs.id || idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '11px', fontWeight: '800', color: '#334155' }}>
-                                                    📝 Observación #{idx + 1}
-                                                </span>
-                                            </div>
-                                            {obs.texto && obs.texto.trim() && obs.texto !== 'Sin observaciones registradas.' && (
-                                                <p style={{ margin: 0, fontSize: '11px', color: '#475569', background: '#fff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'pre-wrap' }}>
-                                                    {obs.texto}
-                                                </p>
-                                            )}
-                                            {imgs.length > 0 && (
-                                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
-                                                    {imgs.map((img: string, imgIdx: number) => (
-                                                        <div key={imgIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                                            <img 
-                                                                src={img} 
-                                                                alt={`Obs #${idx + 1} Foto ${imgIdx + 1}`} 
-                                                                style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }} 
-                                                            />
-                                                            <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '600' }}>Foto {imgIdx + 1}</span>
-                                                        </div>
-                                                    ))}
+                        {/* 3. OBSERVACIONES ADICIONALES (Oculto en reportes de visita ya que los puntos de revisión contienen las fotos y notas completas) */}
+                        {!isVisita && (
+                            reporteData.observacionesList && reporteData.observacionesList.length > 0 ? (
+                                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <h5 style={{ margin: '0 0 4px 0', fontSize: '11px', fontWeight: '800', color: '#1e293b', textTransform: 'uppercase' }}>
+                                        Observaciones Adicionales ({reporteData.observacionesList.length})
+                                    </h5>
+                                    {reporteData.observacionesList.map((obs, idx) => {
+                                        const imgs = (obs.imagenes && Array.isArray(obs.imagenes) ? obs.imagenes : (obs.foto ? [obs.foto] : [])).filter(Boolean);
+                                        return (
+                                            <div key={obs.id || idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#334155' }}>
+                                                        📝 Observación #{idx + 1}
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            /* Fallback para observaciones en texto plano */
-                            reporteData.observaciones && reporteData.observaciones.trim() && !reporteData.observaciones.toLowerCase().includes('sin observaciones') && (
-                                <div style={{ marginTop: '12px', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                    <h5 style={{ margin: '0 0 6px 0', fontSize: '11px', fontWeight: '800', color: '#1e293b', textTransform: 'uppercase' }}>Observaciones Adicionales</h5>
-                                    <p style={{ margin: 0, fontSize: '11px', color: '#475569', whiteSpace: 'pre-wrap' }}>{reporteData.observaciones}</p>
-                                    {((reporteData.imagenesObservacion && reporteData.imagenesObservacion.length > 0) || reporteData.imagenObservacion) && (
-                                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                            {(reporteData.imagenesObservacion || [reporteData.imagenObservacion]).filter(Boolean).map((img, imgIdx) => (
-                                                <img key={imgIdx} src={img} alt={`Extra ${imgIdx + 1}`} style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }} />
-                                            ))}
-                                        </div>
-                                    )}
+                                                {obs.texto && obs.texto.trim() && obs.texto !== 'Sin observaciones registradas.' && (
+                                                    <p style={{ margin: 0, fontSize: '11px', color: '#475569', background: '#fff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', whiteSpace: 'pre-wrap' }}>
+                                                        {obs.texto}
+                                                    </p>
+                                                )}
+                                                {imgs.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                                        {imgs.map((img: string, imgIdx: number) => (
+                                                            <div key={imgIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                                                <img 
+                                                                    src={img} 
+                                                                    alt={`Obs #${idx + 1} Foto ${imgIdx + 1}`} 
+                                                                    style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }} 
+                                                                />
+                                                                <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '600' }}>Foto {imgIdx + 1}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
+                            ) : (
+                                /* Fallback para observaciones en texto plano */
+                                reporteData.observaciones && reporteData.observaciones.trim() && !reporteData.observaciones.toLowerCase().includes('sin observaciones') && (
+                                    <div style={{ marginTop: '12px', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                        <h5 style={{ margin: '0 0 6px 0', fontSize: '11px', fontWeight: '800', color: '#1e293b', textTransform: 'uppercase' }}>Observaciones Adicionales</h5>
+                                        <p style={{ margin: 0, fontSize: '11px', color: '#475569', whiteSpace: 'pre-wrap' }}>{reporteData.observaciones}</p>
+                                        {((reporteData.imagenesObservacion && reporteData.imagenesObservacion.length > 0) || reporteData.imagenObservacion) && (
+                                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
+                                                {(reporteData.imagenesObservacion || [reporteData.imagenObservacion]).filter(Boolean).map((img, imgIdx) => (
+                                                    <img key={imgIdx} src={img} alt={`Extra ${imgIdx + 1}`} style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }} />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
                             )
                         )}
 

@@ -1249,19 +1249,97 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const groupMatch = mappedJob.descripcion?.match(/\[Grupo:\s*(REQ-\d+)\]/);
                 const groupId = groupMatch ? groupMatch[1] : null;
 
+                let groupJobsList: any[] = [];
                 if (groupId && mappedJob.negocio_id) {
                     try {
                         const allJobs = await getTrabajos({ negocio_id: Number(mappedJob.negocio_id) });
-                        const groupJobs = allJobs.filter((t: any) => t.descripcion?.includes(`[Grupo: ${groupId}]`));
+                        groupJobsList = allJobs.filter((t: any) => t.descripcion?.includes(`[Grupo: ${groupId}]`));
                         // Ordenar de menor a mayor por ID
-                        groupJobs.sort((a: any, b: any) => Number(a.id) - Number(b.id));
-                        setGroupedJobs(groupJobs);
+                        groupJobsList.sort((a: any, b: any) => Number(a.id) - Number(b.id));
+                        setGroupedJobs(groupJobsList);
                     } catch (err) {
                         console.error("Error fetching grouped jobs:", err);
                         setGroupedJobs([]);
                     }
                 } else {
                     setGroupedJobs([]);
+                }
+
+                // RECOLECTAR EQUIPOS EXCLUSIVOS DEL MANTENIMIENTO
+                const equipMap = new Map<string, { id: number | string; nombre: string; marca: string; modelo: string; area?: string }>();
+                const addEquip = (eq: any) => {
+                    if (!eq) return;
+                    const key = `${eq.id || ''}_${eq.nombre || ''}_${eq.marca || ''}_${eq.modelo || ''}`;
+                    if (!equipMap.has(key)) {
+                        equipMap.set(key, {
+                            id: eq.id || key,
+                            nombre: eq.nombre || eq.name || 'Equipo',
+                            marca: eq.marca || eq.nombre || '',
+                            modelo: eq.modelo || '',
+                            area: eq.area || eq.levantamientoArea?.nombre || eq.levantamiento_area?.nombre || ''
+                        });
+                    }
+                };
+
+                // 1. Del trabajo actual
+                if (equipo) {
+                    addEquip(equipo);
+                } else if (data.levantamiento_equipo || data.levantamientoEquipo) {
+                    addEquip(data.levantamiento_equipo || data.levantamientoEquipo);
+                }
+
+                // 2. De los trabajos agrupados en la misma solicitud
+                if (groupJobsList && groupJobsList.length > 0) {
+                    groupJobsList.forEach((gj: any) => {
+                        const gjSol = gj.mantenimiento_solicitud_visita || gj.mantenimientoSolicitudVisita || gj.mantenimiento_solicitud_reparacion || gj.mantenimientoSolicitudReparacion;
+                        if (gjSol?.levantamiento_equipo || gjSol?.levantamientoEquipo) {
+                            addEquip(gjSol.levantamiento_equipo || gjSol.levantamientoEquipo);
+                        } else if (gj.levantamiento_equipo || gj.levantamientoEquipo) {
+                            addEquip(gj.levantamiento_equipo || gj.levantamientoEquipo);
+                        } else if (gj.descripcion && gj.descripcion.includes('[Equipo:')) {
+                            const m = gj.descripcion.match(/\[Equipo:\s*(.+?)\]/);
+                            if (m && m[1]) {
+                                addEquip({ id: `g_${gj.id}`, nombre: m[1].trim(), marca: m[1].trim(), modelo: '' });
+                            }
+                        }
+                    });
+                }
+
+                // 3. Fallback de descripción / título
+                if (equipMap.size === 0 && data.descripcion && typeof data.descripcion === 'string' && data.descripcion.includes('[Equipo:')) {
+                    const match = data.descripcion.match(/\[Equipo:\s*(.+?)\]/);
+                    if (match && match[1]) {
+                        addEquip({ id: 'desc_eq', nombre: match[1].trim(), marca: match[1].trim(), modelo: '' });
+                    }
+                }
+                if (equipMap.size === 0 && data.titulo) {
+                    const tMatch = data.titulo.match(/Mantenimiento\s*(?:\([^)]+\))?:\s*([^(]+)/i);
+                    if (tMatch && tMatch[1]) {
+                        addEquip({ id: 'title_eq', nombre: tMatch[1].trim(), marca: tMatch[1].trim(), modelo: '' });
+                    }
+                }
+
+                const listEquips = Array.from(equipMap.values());
+                setMaintenanceEquipmentList(listEquips);
+
+                if (listEquips.length > 0) {
+                    const firstEq = listEquips[0];
+                    setServiceMarca(firstEq.marca || firstEq.nombre || "");
+                    setServiceModelo(firstEq.modelo || "");
+                    setServiceEquipoId(typeof firstEq.id === 'number' ? firstEq.id : null);
+
+                    // Auto-llenar el Punto 1 si está vacío
+                    setTaskItems(prev => prev.map((item, idx) => {
+                        if (idx === 0 && (!item.marca || item.marca === '')) {
+                            return {
+                                ...item,
+                                selectedEquipId: String(firstEq.id),
+                                marca: firstEq.marca || firstEq.nombre || '',
+                                modelo: firstEq.modelo || ''
+                            };
+                        }
+                        return item;
+                    }));
                 }
 
                 setTrabajo(mappedJob as any);
@@ -1708,12 +1786,21 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     const [newQuoteFileName, setNewQuoteFileName] = useState("");
     const [activityPhotos, setActivityPhotos] = useState<string[]>([]);
     const [showSendConfirmModal, setShowSendConfirmModal] = useState(false);
+    const [maintenanceEquipmentList, setMaintenanceEquipmentList] = useState<{
+        id: number | string;
+        nombre: string;
+        marca: string;
+        modelo: string;
+        area?: string;
+    }[]>([]);
+
     const [taskItems, setTaskItems] = useState<{
         id: string;
         descripcion: string;
         foto: string;
         tipoActividad?: string;
         customTipoActividad?: string;
+        selectedEquipId?: string;
         marca?: string;
         modelo?: string;
         pieza?: string;
@@ -1723,7 +1810,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         quoteMateriales?: { nombre: string; cantidad: string; precio: string }[];
         quoteComentarios?: string;
     }>([
-        { id: '1', descripcion: '', foto: '', tipoActividad: 'Mantenimiento', customTipoActividad: '', marca: '', modelo: '', pieza: '', garantia: '', isQuoteIncluded: false, quoteConceptos: [], quoteMateriales: [], quoteComentarios: '' }
+        { id: '1', descripcion: '', foto: '', tipoActividad: 'Mantenimiento', customTipoActividad: '', selectedEquipId: '', marca: '', modelo: '', pieza: '', garantia: '', isQuoteIncluded: false, quoteConceptos: [], quoteMateriales: [], quoteComentarios: '' }
     ]);
 
     // SERVICE TYPE FIELDS (NEW)
@@ -1747,8 +1834,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         setNewTaskDescription("");
         setActiveServiceType("Mantenimiento");
         setCustomServiceType("");
-        setServiceMarca("");
-        setServiceModelo("");
+        const firstEq = maintenanceEquipmentList[0];
+        setServiceMarca(firstEq ? (firstEq.marca || firstEq.nombre || "") : "");
+        setServiceModelo(firstEq ? (firstEq.modelo || "") : "");
         setServicePieza("");
         setServiceGarantia("");
         setConfirmacionLlegada(false);
@@ -1761,7 +1849,22 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         setActivityPhotos([]);
         setNewQuoteFileName("");
         setTaskItems([
-            { id: '1', descripcion: '', foto: '', tipoActividad: 'Mantenimiento', customTipoActividad: '', marca: '', modelo: '', pieza: '', garantia: '', isQuoteIncluded: isSOS, quoteConceptos: isSOS ? [{ descripcion: '', cantidad: '1', precio: '' }] : [], quoteMateriales: [], quoteComentarios: '' }
+            {
+                id: '1',
+                descripcion: '',
+                foto: '',
+                tipoActividad: 'Mantenimiento',
+                customTipoActividad: '',
+                selectedEquipId: firstEq ? String(firstEq.id) : '',
+                marca: firstEq ? (firstEq.marca || firstEq.nombre || '') : '',
+                modelo: firstEq ? (firstEq.modelo || '') : '',
+                pieza: '',
+                garantia: '',
+                isQuoteIncluded: isSOS,
+                quoteConceptos: isSOS ? [{ descripcion: '', cantidad: '1', precio: '' }] : [],
+                quoteMateriales: [],
+                quoteComentarios: ''
+            }
         ]);
         setIsAddModalOpen(true);
     };
@@ -2409,30 +2512,169 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         setShowActivityPDFPreview(true);
     };
 
+    const buildTechQuoteReportData = (targetTarea: any, refSource: any[] = []) => {
+        const tId = targetTarea?.id;
+        const pIdx = targetTarea?.pointIndex;
+        const baseId = targetTarea?.baseId;
+        const workId = trabajo?.id;
+
+        const candidateKeys = [
+            `report_data_${tId}`,
+            `report_data_temporal_${tId}`,
+            workId ? `report_data_${workId}_${tId}` : '',
+            workId ? `report_data_temporal_${workId}_${tId}` : '',
+            baseId && pIdx !== undefined ? `report_data_${baseId}_${pIdx}` : '',
+            baseId && pIdx !== undefined ? `report_data_temporal_${baseId}_${pIdx}` : '',
+            workId && pIdx !== undefined ? `report_data_${workId}_${pIdx}` : '',
+            workId && pIdx !== undefined ? `report_data_temporal_${workId}_${pIdx}` : '',
+            workId ? `report_data_${workId}` : '',
+            workId ? `report_data_temporal_${workId}` : ''
+        ].filter(Boolean);
+
+        let foundReport: any = null;
+        for (const k of candidateKeys) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && (parsed.imagenes || parsed.observacionesList || parsed.puntosEvidencia || parsed.descripcion || parsed.reporteTienda)) {
+                        foundReport = parsed;
+                        break;
+                    }
+                } catch (_) { }
+            }
+        }
+        if (!foundReport) {
+            foundReport = reporteFinal || null;
+        }
+
+        // Build quote items list (conceptos + materiales + refacciones)
+        const quoteItems: any[] = [];
+        if (targetTarea?.quoteData?.conceptos && targetTarea.quoteData.conceptos.length > 0) {
+            targetTarea.quoteData.conceptos.forEach((c: any) => {
+                quoteItems.push({
+                    pieza: c.descripcion,
+                    cantidad: Number(c.cantidad || 1),
+                    costo_estimado: String(c.precio || 0)
+                });
+            });
+        }
+        if (targetTarea?.quoteData?.materiales && targetTarea.quoteData.materiales.length > 0) {
+            targetTarea.quoteData.materiales.forEach((m: any) => {
+                quoteItems.push({
+                    pieza: m.nombre,
+                    cantidad: Number(m.cantidad || 1),
+                    costo_estimado: String(m.precio || 0)
+                });
+            });
+        }
+        if (quoteItems.length === 0) {
+            const mergedRefs = getMergedRefacciones(targetTarea, refSource.length > 0 ? refSource : (foundReport?.refaccionesList || []));
+            mergedRefs.forEach((r: any) => {
+                quoteItems.push({
+                    pieza: r.pieza,
+                    cantidad: Number(r.cantidad || 1),
+                    costo_estimado: String(r.costo_estimado || 0)
+                });
+            });
+        }
+
+        // Evidence / Photos:
+        const allTaskPhotos: string[] = [];
+        if (targetTarea?.photos && Array.isArray(targetTarea.photos)) {
+            targetTarea.photos.forEach((p: string) => { if (p && !allTaskPhotos.includes(p)) allTaskPhotos.push(p); });
+        }
+        subTareas.forEach((st: any) => {
+            if (st.photos && Array.isArray(st.photos)) {
+                st.photos.forEach((p: string) => { if (p && !allTaskPhotos.includes(p)) allTaskPhotos.push(p); });
+            }
+            if (st.imagenObservacion && !allTaskPhotos.includes(st.imagenObservacion)) {
+                allTaskPhotos.push(st.imagenObservacion);
+            }
+            if (st.imagenesObservacion && Array.isArray(st.imagenesObservacion)) {
+                st.imagenesObservacion.forEach((p: string) => { if (p && !allTaskPhotos.includes(p)) allTaskPhotos.push(p); });
+            }
+        });
+
+        const imgs = foundReport?.imagenes || {
+            antes: allTaskPhotos[0] || null,
+            durante: allTaskPhotos[1] || null,
+            despues: allTaskPhotos[2] || null
+        };
+
+        const imgObs = foundReport?.imagenObservacion || (allTaskPhotos.length > 3 ? allTaskPhotos[3] : null);
+        const imgsObs = (foundReport?.imagenesObservacion && foundReport.imagenesObservacion.length > 0)
+            ? foundReport.imagenesObservacion
+            : (allTaskPhotos.length > 0 ? allTaskPhotos : []);
+
+        const puntosEvi = foundReport?.puntosEvidencia || (
+            subTareas.length > 0
+                ? subTareas.map((st, idx) => ({
+                    punto: idx + 1,
+                    tipo: st.serviceData?.tipoServicio || st.tipoActividad || st.titulo || `Punto ${idx + 1}`,
+                    descripcion: st.descripcion || '',
+                    foto: st.photos?.[0] || st.imagenObservacion || allTaskPhotos[idx] || null
+                })).filter(p => p.foto || p.descripcion)
+                : allTaskPhotos.map((p, idx) => ({
+                    punto: idx + 1,
+                    tipo: targetTarea?.serviceData?.tipoServicio || targetTarea?.titulo || `Punto ${idx + 1}`,
+                    descripcion: targetTarea?.descripcion || '',
+                    foto: p
+                }))
+        );
+
+        // Equipment:
+        const eqInfo = foundReport?.equipoInfo || (
+            (targetTarea?.serviceData?.marca || targetTarea?.serviceData?.modelo) ? {
+                tipo: targetTarea.serviceData.tipoServicio || targetTarea.titulo || 'Mantenimiento',
+                marca: targetTarea.serviceData.marca || 'N/A',
+                modelo: targetTarea.serviceData.modelo || 'N/A',
+                piezas: targetTarea.serviceData.pieza || 'N/A',
+                garantia: targetTarea.serviceData.garantia || 'N/A'
+            } : (maintenanceEquipmentList && maintenanceEquipmentList.length > 0 ? {
+                tipo: maintenanceEquipmentList[0].nombre,
+                marca: maintenanceEquipmentList[0].marca,
+                modelo: maintenanceEquipmentList[0].modelo,
+                piezas: 'N/A',
+                garantia: 'N/A'
+            } : null)
+        );
+
+        return {
+            id: foundReport?.dbId || foundReport?.id || trabajo?.id || 'SD',
+            folio: `COT-${(trabajo?.id || '').toString().padStart(5, '0')}`,
+            fecha: foundReport?.fecha || new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }),
+            sucursal: trabajo?.sucursal || 'N/A',
+            encargado: trabajo?.encargado || 'N/A',
+            tecnicoNombre: foundReport?.tecnicoNombre || targetTarea?.tecnicoNombre || trabajo?.tecnico || 'N/A',
+            tecnicoAvatar: foundReport?.tecnicoAvatar || getAvatarForTech(targetTarea?.tecnicoNombre || trabajo?.tecnico || ''),
+            reporteTienda: foundReport?.reporteTienda || targetTarea?.titulo || trabajo?.servicio || 'Servicio',
+            descripcion: foundReport?.descripcion || targetTarea?.descripcion || trabajo?.descripcion || 'Sin descripción',
+            materiales: foundReport?.materiales || quoteItems.map((r: any) => `${r.cantidad || 1}x ${r.pieza}`).join(', ') || 'N/A',
+            observaciones: targetTarea?.quoteData?.comentarios || foundReport?.observaciones || 'Sin observaciones',
+            observacionesList: foundReport?.observacionesList,
+            puntosEvidencia: puntosEvi,
+            imagenes: imgs,
+            imagenObservacion: imgObs,
+            imagenesObservacion: imgsObs,
+            refaccionesList: quoteItems,
+            isVisita: true,
+            involucraEquipo: Boolean(eqInfo),
+            equipoInfo: eqInfo,
+            firmaEmpresa: foundReport?.firmaEmpresa || null,
+        };
+    };
+
     const executeSendQuote = async () => {
         if (!quoteToSend || !trabajo) return;
         setIsSendingQuote(true);
         try {
-            const previewData = {
-                id: trabajo?.id || 'SD',
-                fecha: new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }),
-                sucursal: trabajo?.sucursal || 'N/A',
-                encargado: trabajo?.encargado || 'N/A',
-                tecnicoNombre: quoteToSend.tecnicoNombre || trabajo?.tecnico || 'N/A',
-                tecnicoAvatar: getAvatarForTech(quoteToSend.tecnicoNombre || trabajo?.tecnico || ''),
-                reporteTienda: quoteToSend.descripcion || 'N/A',
-                descripcion: quoteToSend.descripcion || 'N/A',
-                materiales: getMergedRefacciones(quoteToSend, Array.isArray(refaccionesData?.data) ? refaccionesData.data : (refaccionesData || [])).map((r: any) => `${r.cantidad || 1}x ${r.pieza}`).join(', ') || 'N/A',
-                observaciones: quoteToSend.quoteData?.comentarios || 'Sin observaciones',
-                imagenes: {},
-                refaccionesList: getMergedRefacciones(quoteToSend, Array.isArray(refaccionesData?.data) ? refaccionesData.data : (refaccionesData || [])),
-                isVisita: true,
-                involucraEquipo: false,
-                equipoInfo: null,
-                firmaEmpresa: null,
-            };
+            const previewData = buildTechQuoteReportData(
+                quoteToSend,
+                Array.isArray(refaccionesData?.data) ? refaccionesData.data : (refaccionesData || [])
+            );
 
-            const pdfFile = await generateMaintenanceReportPDF(previewData);
+            const pdfFile = await generateMaintenanceReportPDF(previewData as any);
 
             const totalAmount = (previewData.refaccionesList || []).reduce((acc: number, ref: any) => {
                 const qty = Number(ref.cantidad || 1);
@@ -3334,8 +3576,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             if (action === 'accept_and_assign') {
                 showAlert('Cotización Aceptada', `La propuesta fue guardada. Por favor asigna un técnico a continuación.`, 'success');
                 handleOpenAssignModal();
-            } else {
-                // Enviar propuesta al chat
+                // Enviar propuesta al chat comercial con el cliente
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
                 const token = localStorage.getItem('token');
                 try {
@@ -3346,28 +3587,13 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ message: chatMessage })
+                        body: JSON.stringify({ message: chatMessage, canal: 'cliente_admin' })
                     });
                 } catch (err) {
                     console.error("Error enviando propuesta al chat:", err);
                 }
 
-                // Notificar al técnico
-                const tecnicoUserId = (trabajo as any).tecnicoUserId || (trabajo as any).trabajador?.user_id || (trabajo as any).trabajador_id;
-                if (tecnicoUserId) {
-                    try {
-                        await createNotificacion({
-                            user_id: tecnicoUserId,
-                            titulo: '📄 Nueva Propuesta de Precio',
-                            mensaje: `El administrador ha ajustado el precio para el trabajo en "${trabajo.sucursal || 'la sucursal'}". Revisa la propuesta.`,
-                            enlace: `/tecnico/trabajo-detalle/${trabajo.id}`
-                        });
-                    } catch (err) {
-                        console.error("Error enviando notificación al técnico:", err);
-                    }
-                }
-
-                showAlert('Propuesta Enviada', `La propuesta fue enviada al técnico para su revisión.`, 'success');
+                showAlert('Propuesta Enviada', `La propuesta fue enviada al cliente para su revisión.`, 'success');
             }
         } catch (error: any) {
             showAlert('Error', error.response?.data?.message || error.message, 'error');
@@ -3458,7 +3684,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ message: chatMessage })
+                        body: JSON.stringify({ message: chatMessage, canal: 'cliente_admin' })
                     });
                 } catch (chatErr) {
                     console.error("Error sending proposal message to chat:", chatErr);
@@ -3855,7 +4081,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     } catch (e) { }
                 }
 
-                // Enviar al chat
+                // Enviar al chat interno tecnico-admin
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
                 const token = localStorage.getItem('token');
                 try {
@@ -3865,7 +4091,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ message: `❌ ASIGNACIÓN RECHAZADA\nMotivo: ${rejectionReason}` })
+                        body: JSON.stringify({ message: `❌ ASIGNACIÓN RECHAZADA\nMotivo: ${rejectionReason}`, canal: 'tecnico_admin' })
                     });
                 } catch (e) { console.error(e); }
 
@@ -3920,7 +4146,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ message: `MOTIVO DE RECHAZO GENERAL: ${rejectionReason}` })
+                        body: JSON.stringify({ message: `MOTIVO DE RECHAZO GENERAL: ${rejectionReason}`, canal: 'cliente_admin' })
                     });
                 } catch (err) {
                     console.error("Error al enviar mensaje de chat automático:", err);
@@ -3955,18 +4181,6 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 enlace: `/menu/trabajo-detalle/${trabajo.id}?tab=cotizacion`
             });
 
-            const techUserIdReject = (trabajo as any).tecnicoUserId || (trabajo as any).trabajador?.user_id;
-            if (techUserIdReject) {
-                try {
-                    await createNotificacion({
-                        user_id: techUserIdReject,
-                        titulo: '🚫 Cotización Rechazada',
-                        mensaje: `El cliente ha rechazado una opción de presupuesto para "${trabajo.sucursal || 'Servicio'}". Motivo: ${rejectionReason}`,
-                        enlace: `/tecnico-autonomo/trabajo-detalle/${trabajo.id}?tab=cotizacion`
-                    });
-                } catch (e) { }
-            }
-
             if (trabajo.admin_autonomo_id) {
                 try {
                     await createNotificacion({
@@ -3978,7 +4192,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 } catch (e) { }
             }
 
-            // 2.5 Enviar el motivo de rechazo al chat automáticamente
+            // 2.5 Enviar el motivo de rechazo al chat automáticamente en el canal cliente_admin
             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
             const token = localStorage.getItem('token');
             try {
@@ -3988,7 +4202,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ message: `MOTIVO DE RECHAZO: ${rejectionReason}` })
+                    body: JSON.stringify({ message: `MOTIVO DE RECHAZO: ${rejectionReason}`, canal: 'cliente_admin' })
                 });
             } catch (err) {
                 console.error("Error al enviar mensaje de chat automático:", err);
@@ -4020,18 +4234,6 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 enlace: `/menu/trabajo-detalle/${trabajo.id}?tab=cotizacion`
             });
 
-            const techUserId1 = (trabajo as any).tecnicoUserId || (trabajo as any).trabajador?.user_id;
-            if (techUserId1) {
-                try {
-                    await createNotificacion({
-                        user_id: techUserId1,
-                        titulo: '🔁 Solicitud de Recotización',
-                        mensaje: `El cliente ha solicitado una recotización para "${trabajo.sucursal || 'la sucursal'}".`,
-                        enlace: `/tecnico-autonomo/trabajo-detalle/${trabajo.id}?tab=cotizacion`
-                    });
-                } catch (e) { console.error("Error notificando técnico:", e); }
-            }
-
             if (trabajo.admin_autonomo_id) {
                 try {
                     await createNotificacion({
@@ -4052,7 +4254,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ message: `🔁 SOLICITUD DE RECOTIZACIÓN\nEl cliente solicita una nueva propuesta de precio para este trabajo.` })
+                    body: JSON.stringify({ message: `🔁 SOLICITUD DE RECOTIZACIÓN\nEl cliente solicita una nueva propuesta de precio para este trabajo.`, canal: 'cliente_admin' })
                 });
             } catch (err) {
                 console.error("Error al enviar mensaje de chat automático:", err);
@@ -4089,18 +4291,6 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 enlace: `/menu/trabajo-detalle/${trabajo.id}?tab=cotizacion`
             });
 
-            const techUserId2 = (trabajo as any).tecnicoUserId || (trabajo as any).trabajador?.user_id;
-            if (techUserId2) {
-                try {
-                    await createNotificacion({
-                        user_id: techUserId2,
-                        titulo: '🔁 Solicitud de Re-Cotización',
-                        mensaje: `El cliente solicita re-cotizar "${cotizTitle}" (${cotizMonto}) para "${trabajo.sucursal || 'la sucursal'}". Motivo: ${recotizMotivo}`,
-                        enlace: `/tecnico-autonomo/trabajo-detalle/${trabajo.id}?tab=cotizacion`
-                    });
-                } catch (e) { console.error("Error notificando técnico:", e); }
-            }
-
             if (trabajo.admin_autonomo_id) {
                 try {
                     await createNotificacion({
@@ -4118,7 +4308,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 await fetch(`${API_URL}/trabajos/${trabajo.id}/chat`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: `🔁 SOLICITUD DE RE-COTIZACIÓN\nPropuesta: ${cotizTitle} (${cotizMonto})\nMotivo: ${recotizMotivo}` })
+                    body: JSON.stringify({ message: `🔁 SOLICITUD DE RE-COTIZACIÓN\nPropuesta: ${cotizTitle} (${cotizMonto})\nMotivo: ${recotizMotivo}`, canal: 'cliente_admin' })
                 });
             } catch (err) { console.error(err); }
 
@@ -4377,7 +4567,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ message: `🔁 SOLICITUD DE RECOTIZACIÓN GENERAL\nEl cliente solicita una nueva propuesta para todos los conceptos de este trabajo.` })
+                    body: JSON.stringify({ message: `🔁 SOLICITUD DE RECOTIZACIÓN GENERAL\nEl cliente solicita una nueva propuesta para todos los conceptos de este trabajo.`, canal: 'cliente_admin' })
                 });
             } catch (err) {
                 console.error("Error al enviar mensaje al chat:", err);
@@ -7917,6 +8107,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                             trabajoId={trabajo.id}
                                                             currentUser={user}
                                                             inlineMode={true}
+                                                            canal={isSOS ? 'general' : 'cliente_admin'}
+                                                            isSOS={isSOS}
                                                         />
                                                     )}
                                                 </div>
@@ -8176,24 +8368,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 {/* Download PDF */}
                                                                                                 <button
                                                                                                     onClick={() => {
-                                                                                                        setCotizacionPreviewData({
-                                                                                                            id: trabajo?.id || 'N/A',
-                                                                                                            fecha: new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }),
-                                                                                                            sucursal: trabajo?.sucursal || 'N/A',
-                                                                                                            encargado: trabajo?.encargado || 'N/A',
-                                                                                                            tecnicoNombre: tarea.tecnicoNombre || trabajo?.tecnico || 'N/A',
-                                                                                                            tecnicoAvatar: getAvatarForTech(tarea.tecnicoNombre || trabajo?.tecnico || ''),
-                                                                                                            reporteTienda: tarea.descripcion || 'N/A',
-                                                                                                            descripcion: tarea.descripcion || 'N/A',
-                                                                                                            materiales: getMergedRefacciones(tarea, refaccionesSource || []).map((r: any) => `${r.cantidad || 1}x ${r.pieza}`).join(', ') || 'N/A',
-                                                                                                            observaciones: tarea.quoteData?.comentarios || 'Sin observaciones',
-                                                                                                            imagenes: {},
-                                                                                                            refaccionesList: getMergedRefacciones(tarea, refaccionesSource || []),
-                                                                                                            isVisita: true,
-                                                                                                            involucraEquipo: false,
-                                                                                                            equipoInfo: null,
-                                                                                                            firmaEmpresa: null,
-                                                                                                        });
+                                                                                                        const prepared = buildTechQuoteReportData(tarea, refaccionesSource || []);
+                                                                                                        setCotizacionPreviewData(prepared);
                                                                                                         setShowCotizacionPreview(true);
                                                                                                     }}
                                                                                                     style={{ flex: 1, padding: '10px 14px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s' }}
@@ -8692,12 +8868,17 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                         <div style={{
                                                             marginTop: '8px',
                                                             paddingTop: '16px',
-                                                            borderTop: (subTareas.some(t => t.esCotizacion) || actualReporte || (quoteHistory && quoteHistory.length > 0)) ? '2px dashed #e2e8f0' : 'none'
+                                                            borderTop: (subTareas.some(t => t.esCotizacion) || actualReporte || (quoteHistory && quoteHistory.length > 0)) ? '2px dashed #e2e8f0' : 'none',
+                                                            width: '100%',
+                                                            boxSizing: 'border-box'
                                                         }}>
                                                             <NegotiationChatWidget
                                                                 trabajoId={trabajo.id}
                                                                 currentUser={user}
                                                                 inlineMode={true}
+                                                                canal={isSOS ? 'general' : (isTechRole ? 'tecnico_admin' : 'cliente_admin')}
+                                                                allowChannelSwitch={!isSOS && isAdminUser}
+                                                                isSOS={isSOS}
                                                             />
                                                         </div>
                                                     )}
@@ -10029,7 +10210,26 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                         {taskItems.length < 10 && (
                                             <button
                                                 type="button"
-                                                onClick={() => setTaskItems([...taskItems, { id: String(Date.now()), descripcion: '', foto: '', tipoActividad: 'Mantenimiento', customTipoActividad: '', marca: '', modelo: '', pieza: '', garantia: '', isQuoteIncluded: isSOS, quoteConceptos: isSOS ? [{ descripcion: '', cantidad: '1', precio: '' }] : [], quoteMateriales: [], quoteComentarios: '' }])}
+                                                onClick={() => {
+                                                    const nextIdx = taskItems.length;
+                                                    const nextEquip = (maintenanceEquipmentList && maintenanceEquipmentList[nextIdx]) ? maintenanceEquipmentList[nextIdx] : (maintenanceEquipmentList && maintenanceEquipmentList[0] ? maintenanceEquipmentList[0] : null);
+                                                    setTaskItems([...taskItems, {
+                                                        id: String(Date.now()),
+                                                        descripcion: '',
+                                                        foto: '',
+                                                        tipoActividad: 'Mantenimiento',
+                                                        customTipoActividad: '',
+                                                        selectedEquipId: nextEquip ? String(nextEquip.id) : '',
+                                                        marca: nextEquip ? (nextEquip.marca || nextEquip.nombre || '') : '',
+                                                        modelo: nextEquip ? (nextEquip.modelo || '') : '',
+                                                        pieza: '',
+                                                        garantia: '',
+                                                        isQuoteIncluded: isSOS,
+                                                        quoteConceptos: isSOS ? [{ descripcion: '', cantidad: '1', precio: '' }] : [],
+                                                        quoteMateriales: [],
+                                                        quoteComentarios: ''
+                                                    }]);
+                                                }}
                                                 style={{
                                                     background: '#fff3ed',
                                                     color: '#f26522',
@@ -10229,60 +10429,118 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                     )}
 
                                                     {(item.tipoActividad === 'Mantenimiento' || item.tipoActividad === 'Instalacion' || item.tipoActividad === 'Otro') && (
-                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginTop: '12px', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                                            <div>
-                                                                <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Marca / Equipo</label>
-                                                                <input
-                                                                    placeholder="Ej. Daikin, York..."
-                                                                    value={item.marca || ''}
-                                                                    onChange={(e) => {
-                                                                        const val = e.target.value;
-                                                                        setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, marca: val } : it));
-                                                                    }}
-                                                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Modelo</label>
-                                                                <input
-                                                                    placeholder="Ej. R-410A..."
-                                                                    value={item.modelo || ''}
-                                                                    onChange={(e) => {
-                                                                        const val = e.target.value;
-                                                                        setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, modelo: val } : it));
-                                                                    }}
-                                                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
-                                                                />
-                                                            </div>
-                                                            {item.tipoActividad === 'Instalacion' && (
-                                                                <>
-                                                                    <div>
-                                                                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Pieza</label>
-                                                                        <input
-                                                                            placeholder="Ej. Evaporador..."
-                                                                            value={item.pieza || ''}
-                                                                            onChange={(e) => {
-                                                                                const val = e.target.value;
-                                                                                setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, pieza: val } : it));
-                                                                            }}
-                                                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
-                                                                        />
+                                                        <div style={{ marginTop: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                                            {/* SELECTOR EXCLUSIVO DE EQUIPOS PARA MANTENIMIENTO */}
+                                                            {item.tipoActividad === 'Mantenimiento' && maintenanceEquipmentList.length > 0 && (
+                                                                <div style={{ marginBottom: '12px', background: '#fff7ed', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #fed7aa' }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#ea580c', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                                                            ⚙️ Seleccionar Equipo del Mantenimiento:
+                                                                        </label>
+                                                                        <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#c2410c', background: '#ffedd5', padding: '2px 8px', borderRadius: '6px' }}>
+                                                                            {maintenanceEquipmentList.length} {maintenanceEquipmentList.length === 1 ? 'equipo en servicio' : 'equipos en servicio'}
+                                                                        </span>
                                                                     </div>
-                                                                    <div>
-                                                                        <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Garantía (Meses)</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="Ej. 12"
-                                                                            value={item.garantia || ''}
-                                                                            onChange={(e) => {
-                                                                                const val = e.target.value;
-                                                                                setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, garantia: val } : it));
-                                                                            }}
-                                                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
-                                                                        />
+                                                                    <select
+                                                                        value={item.selectedEquipId || ''}
+                                                                        onChange={(e) => {
+                                                                            const selId = e.target.value;
+                                                                            const found = maintenanceEquipmentList.find(eq => String(eq.id) === String(selId));
+                                                                            if (found) {
+                                                                                setTaskItems(prev => prev.map((it, i) => i === index ? {
+                                                                                    ...it,
+                                                                                    selectedEquipId: selId,
+                                                                                    marca: found.marca || found.nombre || '',
+                                                                                    modelo: found.modelo || ''
+                                                                                } : it));
+                                                                            } else {
+                                                                                setTaskItems(prev => prev.map((it, i) => i === index ? {
+                                                                                    ...it,
+                                                                                    selectedEquipId: ''
+                                                                                } : it));
+                                                                            }
+                                                                        }}
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            padding: '9px 12px',
+                                                                            borderRadius: '8px',
+                                                                            border: '1.5px solid #fdba74',
+                                                                            background: '#ffffff',
+                                                                            fontSize: '13px',
+                                                                            fontWeight: '700',
+                                                                            color: '#1e293b',
+                                                                            outline: 'none',
+                                                                            cursor: 'pointer'
+                                                                        }}
+                                                                    >
+                                                                        <option value="">-- Elige el equipo para auto-llenar datos --</option>
+                                                                        {maintenanceEquipmentList.map(eq => (
+                                                                            <option key={eq.id} value={eq.id}>
+                                                                                {eq.nombre} {eq.marca ? `(${eq.marca})` : ''} {eq.modelo ? `- Mod: ${eq.modelo}` : ''} {eq.area ? `· Área: ${eq.area}` : ''}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                    <div style={{ fontSize: '11px', color: '#9a3412', marginTop: '4px', fontStyle: 'italic' }}>
+                                                                        💡 Al elegir un equipo, la Marca y Modelo se auto-llenan automáticamente.
                                                                     </div>
-                                                                </>
+                                                                </div>
                                                             )}
+
+                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                                                                <div>
+                                                                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Marca / Equipo</label>
+                                                                    <input
+                                                                        placeholder="Ej. Daikin, York..."
+                                                                        value={item.marca || ''}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, marca: val } : it));
+                                                                        }}
+                                                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Modelo</label>
+                                                                    <input
+                                                                        placeholder="Ej. R-410A..."
+                                                                        value={item.modelo || ''}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, modelo: val } : it));
+                                                                        }}
+                                                                        style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
+                                                                    />
+                                                                </div>
+                                                                {item.tipoActividad === 'Instalacion' && (
+                                                                    <>
+                                                                        <div>
+                                                                            <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Pieza</label>
+                                                                            <input
+                                                                                placeholder="Ej. Evaporador..."
+                                                                                value={item.pieza || ''}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, pieza: val } : it));
+                                                                                }}
+                                                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
+                                                                            />
+                                                                        </div>
+                                                                        <div>
+                                                                            <label style={{ display: 'block', fontSize: '10.5px', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Garantía (Meses)</label>
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Ej. 12"
+                                                                                value={item.garantia || ''}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => i === index ? { ...it, garantia: val } : it));
+                                                                                }}
+                                                                                style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12.5px', background: '#fff', boxSizing: 'border-box' }}
+                                                                            />
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -11671,6 +11929,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     trabajo={trabajo}
                     isVisita={true}
                     reporteData={cotizacionPreviewData}
+                    subTareas={subTareas}
                     onClose={() => setShowCotizacionPreview(false)}
                 />
             )}
