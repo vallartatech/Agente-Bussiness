@@ -13,6 +13,7 @@ import {
     HiOutlineSparkles
 } from 'react-icons/hi2';
 
+
 interface UbicacionMapaModalProps {
     isOpen: boolean;
     onClose: () => void;

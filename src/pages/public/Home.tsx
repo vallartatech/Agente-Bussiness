@@ -271,15 +271,15 @@ const Home: React.FC = () => {
                 <div className="section-container">
                     <div className="stats-grid">
                         <div className="stat-card reveal-on-scroll">
-                            <span className="stat-number">150+</span>
+                            <span className="stat-number">0</span>
                             <span className="stat-label">Negocios e Instalaciones</span>
                         </div>
                         <div className="stat-card reveal-on-scroll" style={{ transitionDelay: '150ms' }}>
-                            <span className="stat-number">99.8%</span>
+                            <span className="stat-number">0%</span>
                             <span className="stat-label">Eficiencia en Tiempos</span>
                         </div>
                         <div className="stat-card reveal-on-scroll" style={{ transitionDelay: '300ms' }}>
-                            <span className="stat-number">5,000+</span>
+                            <span className="stat-number">0</span>
                             <span className="stat-label">Trabajos Completados</span>
                         </div>
                         <div className="stat-card reveal-on-scroll" style={{ transitionDelay: '450ms' }}>
