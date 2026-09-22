@@ -64,7 +64,7 @@ interface Trabajo {
     ubicacion: string;
     tecnico: string;
     fecha: string;
-    estado: "En Espera" | "Finalizado" | "En Proceso" | "Asignado" | "Solicitud" | "Cotización Enviada" | "Cotización Aceptada" | "Cotización Rechazada" | "Cotización Aprobada" | "Pendiente de Cotizar" | "Cotización Reactivada";
+    estado: "En Espera" | "Finalizado" | "En Proceso" | "Asignado" | "Solicitud" | "Cotización Enviada" | "Cotización Aceptada" | "Cotización Rechazada" | "Recotización Solicitada" | "Cotización Aprobada" | "Pendiente de Cotizar" | "Cotización Reactivada" | string;
     tipo?: "Visita" | "Trabajo" | "Nueva Solicitud" | "SOS";
     originalTipo?: "Visita" | "Trabajo" | "Nueva Solicitud" | "SOS";
     visitado?: boolean;
@@ -1073,6 +1073,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
     // ESTADO: edición de cotización existente
     const [editingCotizacion, setEditingCotizacion] = useState<Cotizacion | null>(null);
+    const [editTitulo, setEditTitulo] = useState("");
+    const [editManoObra, setEditManoObra] = useState("");
+    const [editMaterials, setEditMaterials] = useState<{ material: string; piezas: string; precio: string }[]>([]);
     const [editCosto, setEditCosto] = useState("");
     const [editNotas, setEditNotas] = useState("");
     const [editArchivoFile, setEditArchivoFile] = useState<File | null>(null);
@@ -1711,7 +1714,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
     // Al abrir modal de asignación, para SOS se inicia como Visita diagnóstica urgente
     const handleOpenAssignModal = () => {
-        setSelectedType("Visita");
+        if (trabajo?.estado === 'Cotización Aceptada' || trabajo?.estado === 'Cotización Aprobada' || trabajo?.estado === 'Trabajo' || trabajo?.estado === 'En Ejecución') {
+            setSelectedType("Trabajo");
+        } else {
+            setSelectedType("Visita");
+        }
 
         if (trabajo?.trabajador_id && !selectedTechnicians.includes(trabajo.trabajador_id)) {
             setSelectedTechnicians([trabajo.trabajador_id]);
@@ -3911,8 +3918,13 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
     const handleEditarCotizacion = (cotiz: Cotizacion) => {
         setEditingCotizacion(cotiz);
-        setEditCosto(String(cotiz.monto));
-        setEditNotas(cotiz.descripcion || "");
+        const { materials, manoObra, notes } = parseQuoteMaterials(cotiz.descripcion || "");
+        const title = getQuoteTitle(cotiz.descripcion || "", "");
+        setEditTitulo(title);
+        setEditManoObra(manoObra ? String(manoObra) : (materials.length === 0 ? String(cotiz.monto || "") : "0"));
+        setEditMaterials(materials.length > 0 ? materials : [{ material: '', piezas: '1', precio: '' }]);
+        setEditNotas(notes || "");
+        setEditCosto(String(cotiz.monto || "0"));
         setEditArchivoFile(null);
         setEditNombreArchivo("");
     };
@@ -3920,9 +3932,32 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     const handleUpdateCotizacion = async () => {
         if (!editingCotizacion?.id) return;
         try {
+            const matsTotal = editMaterials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+            const manoObraNum = parseFloat(editManoObra) || 0;
+            const totalCosto = manoObraNum + matsTotal;
+            const finalMonto = totalCosto > 0 ? totalCosto : (parseFloat(editCosto) || 0);
+
+            const validMaterials = editMaterials.filter(m => m.material.trim());
+            const formattedMaterialsStr = validMaterials.map(m => {
+                const piezasStr = m.piezas ? ` (${m.piezas})` : ' (1)';
+                const precioStr = m.precio ? ` - ${m.precio}` : '';
+                return `- ${m.material.trim()}${piezasStr}${precioStr}`;
+            }).join('\n');
+
+            const titleHeader = editTitulo.trim() ? `=== TÍTULO: ${editTitulo.trim()} ===\n\n` : '';
+            const manoObraLine = `- Mano de Obra / Servicio Técnico - ${editManoObra || 0}`;
+            const parts = [
+                titleHeader ? titleHeader.trim() : null,
+                manoObraLine,
+                formattedMaterialsStr ? formattedMaterialsStr : null,
+                editNotas.trim() ? `\n${editNotas.trim()}` : null
+            ].filter(Boolean);
+
+            const finalDescripcion = parts.join('\n');
+
             const formData = new FormData();
-            formData.append('monto', editCosto);
-            formData.append('descripcion', editNotas);
+            formData.append('monto', String(finalMonto));
+            formData.append('descripcion', finalDescripcion);
             formData.append('estado', 'Pendiente');
             if (editArchivoFile) formData.append('archivo', editArchivoFile);
 
@@ -4278,7 +4313,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         }
         try {
             await updateCotizacionStatus(cotizParaRecotizar, "Rechazada");
-            await updateEstadoTrabajo(trabajo.id, { estado: "Cotización Rechazada" });
+            await updateEstadoTrabajo(trabajo.id, { estado: "Recotización Solicitada" });
 
             const targetCotiz = cotizaciones.find(c => c.id === cotizParaRecotizar);
             const cotizTitle = targetCotiz?.descripcion ? getQuoteTitle(targetCotiz.descripcion, `Cotización #${cotizParaRecotizar}`) : `Cotización #${cotizParaRecotizar}`;
@@ -4317,7 +4352,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             localStorage.setItem('cotiz_recotizacion_reasons', JSON.stringify(newRecotiz));
 
             setCotizaciones(prev => prev.map(c => c.id === cotizParaRecotizar ? { ...c, estado: "Rechazada" as const } : c));
-            setTrabajo((prev) => prev ? { ...prev, estado: "Cotización Rechazada" } : prev);
+            setTrabajo((prev) => prev ? { ...prev, estado: "Recotización Solicitada" } : prev);
             setShowRecotizModal(false);
             setRecotizMotivo('');
             setCotizParaRecotizar(null);
@@ -6013,9 +6048,29 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                 </div>
                                                 <div style={{ minWidth: '120px' }}>
                                                     <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', display: 'block' }}>👷 Técnico Asignado</span>
-                                                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#059669', wordBreak: 'break-word' }}>
-                                                        {trabajo.tecnico || 'Técnico de Servicio'}
-                                                    </span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        <span style={{ fontSize: '14px', fontWeight: '800', color: (!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id) ? '#ef4444' : '#059669', wordBreak: 'break-word' }}>
+                                                            {trabajo.tecnico && trabajo.tecnico !== 'Sin asignar' ? trabajo.tecnico : 'Sin Asignar'}
+                                                        </span>
+                                                        {(!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id) && (user?.role === 'admin' || user?.role === 'autonomo' || user?.role === 'gerente-general') && (
+                                                            <button
+                                                                onClick={handleOpenAssignModal}
+                                                                style={{
+                                                                    padding: '4px 10px',
+                                                                    background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+                                                                    color: 'white',
+                                                                    border: 'none',
+                                                                    borderRadius: '8px',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '800',
+                                                                    cursor: 'pointer',
+                                                                    boxShadow: '0 2px 6px rgba(59, 130, 246, 0.3)'
+                                                                }}
+                                                            >
+                                                                👤 Asignar Técnico
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                             {(user?.role === 'tecnico' || user?.role === 'tecnico-normal' || user?.role === 'tecnico-autonomo') && (
@@ -6510,7 +6565,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                 ) : null
                                         ) : (
                                             // FLUJO NORMAL: solo mostrar botón asignar si aún no hay técnico asignado/aceptado
-                                            (!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar') && !['En Espera', 'En Proceso', 'En Ejecución', 'Cotización Enviada', 'Cotización Aceptada', 'Cotización Aprobada', 'Finalizado', 'Completado'].includes(trabajo.estado) ? (
+                                            (!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id) && !['Finalizado', 'Completado', 'Cancelado'].includes(trabajo.estado) ? (
                                                 <button
                                                     onClick={handleOpenAssignModal}
                                                     style={{
@@ -7584,23 +7639,145 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                 </div>
                                                                             )}
                                                                             {isEditing ? (
-                                                                                /* FORMULARIO INLINE DE EDICIÓN */
-                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
-                                                                                    <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Editando Opción {idx + 1}</p>
-                                                                                    <div style={{ position: 'relative' }}>
-                                                                                        <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#f26522', fontSize: '16px' }}>$</span>
-                                                                                        <input type="number" value={editCosto} onChange={e => setEditCosto(e.target.value)}
-                                                                                            style={{ width: '100%', padding: '12px 14px 12px 30px', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '16px', fontWeight: '700', boxSizing: 'border-box' }} />
+                                                                                /* FORMULARIO ESTRUCTURADO DE EDICIÓN / RECOTIZACIÓN */
+                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box', background: '#ffffff', borderRadius: '16px', padding: '16px', border: '1.5px solid #fed7aa', boxShadow: '0 4px 14px rgba(242, 101, 34, 0.08)' }}>
+                                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                                        <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#f26522', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                                            ✏️ Ajustando Propuesta #{idx + 1}
+                                                                                        </p>
+                                                                                        {(() => {
+                                                                                            const matsTotal = editMaterials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+                                                                                            const totalCalc = (parseFloat(editManoObra) || 0) + matsTotal;
+                                                                                            return (
+                                                                                                <span style={{ fontSize: '15px', fontWeight: '900', color: '#1e293b', background: '#fff7ed', padding: '4px 12px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                                                                                    Total: ${totalCalc.toLocaleString('es-MX')}
+                                                                                                </span>
+                                                                                            );
+                                                                                        })()}
                                                                                     </div>
-                                                                                    <textarea value={editNotas} onChange={e => setEditNotas(e.target.value)} placeholder="Notas..."
-                                                                                        style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '14px', resize: 'vertical', minHeight: '80px', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+
+                                                                                    {/* Título de la propuesta */}
+                                                                                    <div>
+                                                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>
+                                                                                            Título de la Propuesta / Problema
+                                                                                        </label>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            placeholder="Ej: Precio de todo el trabajo con el horno"
+                                                                                            value={editTitulo}
+                                                                                            onChange={e => setEditTitulo(e.target.value)}
+                                                                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '14px', fontWeight: '600', boxSizing: 'border-box' }}
+                                                                                        />
+                                                                                    </div>
+
+                                                                                    {/* Mano de obra */}
+                                                                                    <div>
+                                                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>
+                                                                                            Mano de Obra / Servicio Técnico ($)
+                                                                                        </label>
+                                                                                        <div style={{ position: 'relative' }}>
+                                                                                            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#f26522', fontSize: '15px' }}>$</span>
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                placeholder="Monto de mano de obra..."
+                                                                                                value={editManoObra}
+                                                                                                onChange={e => setEditManoObra(e.target.value)}
+                                                                                                style={{ width: '100%', padding: '9px 12px 9px 28px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '14px', fontWeight: '700', boxSizing: 'border-box' }}
+                                                                                            />
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    {/* Materiales y Refacciones */}
+                                                                                    <div>
+                                                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                                                                            Materiales y Refacciones
+                                                                                        </label>
+                                                                                        <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                                            {editMaterials.map((mat, mIdx) => (
+                                                                                                <div key={mIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingBottom: '8px', borderBottom: mIdx < editMaterials.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                                                                                                    <input
+                                                                                                        placeholder="Nombre del material o refacción..."
+                                                                                                        value={mat.material}
+                                                                                                        onChange={e => {
+                                                                                                            const next = [...editMaterials];
+                                                                                                            next[mIdx].material = e.target.value;
+                                                                                                            setEditMaterials(next);
+                                                                                                        }}
+                                                                                                        style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                                                                                                    />
+                                                                                                    <div style={{ display: 'grid', gridTemplateColumns: editMaterials.length > 1 ? 'minmax(0, 1fr) minmax(0, 1.4fr) auto' : 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: '8px', alignItems: 'center' }}>
+                                                                                                        <input
+                                                                                                            type="number"
+                                                                                                            placeholder="Cant"
+                                                                                                            value={mat.piezas}
+                                                                                                            onChange={e => {
+                                                                                                                const next = [...editMaterials];
+                                                                                                                next[mIdx].piezas = e.target.value;
+                                                                                                                setEditMaterials(next);
+                                                                                                            }}
+                                                                                                            style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                                                                                                        />
+                                                                                                        <input
+                                                                                                            type="number"
+                                                                                                            placeholder="Precio ($)"
+                                                                                                            value={mat.precio}
+                                                                                                            onChange={e => {
+                                                                                                                const next = [...editMaterials];
+                                                                                                                next[mIdx].precio = e.target.value;
+                                                                                                                setEditMaterials(next);
+                                                                                                            }}
+                                                                                                            style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                                                                                                        />
+                                                                                                        {editMaterials.length > 1 && (
+                                                                                                            <button
+                                                                                                                type="button"
+                                                                                                                onClick={() => setEditMaterials(editMaterials.filter((_, i) => i !== mIdx))}
+                                                                                                                style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                                                                                                            >
+                                                                                                                ✕
+                                                                                                            </button>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => setEditMaterials([...editMaterials, { material: '', piezas: '1', precio: '' }])}
+                                                                                                style={{ background: '#fff', color: '#f26522', border: '1px dashed #fed7aa', padding: '8px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s', marginTop: '4px' }}
+                                                                                            >
+                                                                                                + Agregar Material / Refacción
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    {/* Notas / Observaciones */}
+                                                                                    <div>
+                                                                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>
+                                                                                            Notas y Observaciones
+                                                                                        </label>
+                                                                                        <textarea
+                                                                                            value={editNotas}
+                                                                                            onChange={e => setEditNotas(e.target.value)}
+                                                                                            placeholder="Notas o aclaraciones para el cliente..."
+                                                                                            rows={2}
+                                                                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                                                                                        />
+                                                                                    </div>
+
+                                                                                    {/* Documento adjunto */}
                                                                                     <input ref={editFileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setEditArchivoFile(f); setEditNombreArchivo(f.name); } }} />
-                                                                                    <button onClick={() => editFileInputRef.current?.click()} style={{ padding: '10px', borderRadius: '10px', border: '2px dashed #e2e8f0', background: editArchivoFile ? '#f0fdf4' : '#f8fafc', color: editArchivoFile ? '#059669' : '#64748b', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+                                                                                    <button type="button" onClick={() => editFileInputRef.current?.click()} style={{ padding: '9px', borderRadius: '10px', border: '1.5px dashed #cbd5e1', background: editArchivoFile ? '#f0fdf4' : '#f8fafc', color: editArchivoFile ? '#059669' : '#64748b', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>
                                                                                         {editArchivoFile ? `✓ ${editNombreArchivo}` : '📎 Cambiar documento (opcional)'}
                                                                                     </button>
-                                                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                                                        <button onClick={handleUpdateCotizacion} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #f26522, #d14d13)', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '14px' }}>💾 Guardar cambios y Reenviar</button>
-                                                                                        <button onClick={() => setEditingCotizacion(null)} style={{ padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', color: '#475569' }}>Cancelar</button>
+
+                                                                                    {/* Botones de acción */}
+                                                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                                                                        <button type="button" onClick={handleUpdateCotizacion} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #f26522, #d14d13)', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(242, 101, 34, 0.3)' }}>
+                                                                                            💾 Guardar cambios y Reenviar
+                                                                                        </button>
+                                                                                        <button type="button" onClick={() => setEditingCotizacion(null)} style={{ padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', color: '#475569' }}>
+                                                                                            Cancelar
+                                                                                        </button>
                                                                                     </div>
                                                                                 </div>
                                                                             ) : (
@@ -8520,9 +8697,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                             }
                                                                                                                         }
 
-                                                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Cotización Rechazada' });
+                                                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Recotización Solicitada' });
                                                                                                                         setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Rechazada' as any } : t));
-                                                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Cotización Rechazada' } : prev);
+                                                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Recotización Solicitada' } : prev);
                                                                                                                         showAlert('Re-Cotización Solicitada', `Has devuelto la cotización a ${tarea.tecnicoNombre || 'el técnico'} para que la modifique.`, 'warning');
                                                                                                                     } catch (error) {
                                                                                                                         showAlert('Error', 'Hubo un problema al actualizar el estado.', 'error');
@@ -8540,7 +8717,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                                             {/* Status badge if already accepted/rejected */}
                                                                                             {(() => {
-                                                                                                if (isAcceptedState || isRejectedState) {
+                                                                                                const isRecotizState = trabajo?.estado === 'Recotización Solicitada' || trabajo?.estado?.toLowerCase().includes('recotiz');
+                                                                                                if (isAcceptedState || isRejectedState || isRecotizState) {
                                                                                                     return (
                                                                                                         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
                                                                                                             <span style={{
@@ -8548,11 +8726,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                 borderRadius: '20px',
                                                                                                                 fontSize: '12px',
                                                                                                                 fontWeight: '800',
-                                                                                                                background: isAcceptedState ? '#dcfce7' : '#fef2f2',
-                                                                                                                color: isAcceptedState ? '#166534' : '#991b1b',
-                                                                                                                border: `1px solid ${isAcceptedState ? '#86efac' : '#fca5a5'}`
+                                                                                                                background: isAcceptedState ? '#dcfce7' : isRecotizState ? '#fef3c7' : '#fef2f2',
+                                                                                                                color: isAcceptedState ? '#166534' : isRecotizState ? '#b45309' : '#991b1b',
+                                                                                                                border: `1px solid ${isAcceptedState ? '#86efac' : isRecotizState ? '#fde68a' : '#fca5a5'}`
                                                                                                             }}>
-                                                                                                                {isAcceptedState ? '✓ Cotización Aceptada' : '✕ Cotización Rechazada'}
+                                                                                                                {isAcceptedState ? '✓ Cotización Aceptada' : isRecotizState ? '🔁 Recotización Solicitada' : '✕ Cotización Rechazada'}
                                                                                                             </span>
                                                                                                         </div>
                                                                                                     );
@@ -8769,10 +8947,10 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             <button
                                                                                 onClick={async () => {
                                                                                     try {
-                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Cotización Rechazada' });
+                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Recotización Solicitada' });
                                                                                         if (cotizActual?.id) { try { await updateCotizacion(cotizActual.id, { estado: 'Rechazada', monto: cotizActual.monto }); } catch (e) { } }
-                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Cotización Rechazada' } : prev);
-                                                                                        showAlert('Re-Cotización Solicitada', 'Se rechazó la cotización.', 'warning');
+                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Recotización Solicitada' } : prev);
+                                                                                        showAlert('Re-Cotización Solicitada', 'Se solicitó la re-cotización.', 'warning');
                                                                                     } catch (error) { showAlert('Error', 'Hubo un problema al actualizar el estado.', 'error'); }
                                                                                 }}
                                                                                 style={{ padding: '10px 14px', background: '#fff', color: '#f59e0b', border: '1.5px solid #fcd34d', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}

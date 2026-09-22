@@ -14,6 +14,8 @@ interface PDFReportData {
     materiales: string;
     observaciones: string;
     observacionesList?: { id: string; texto: string; imagenes: string[] }[];
+    imagenObservacion?: string | null;
+    imagenesObservacion?: string[] | null;
     imagenes: {
         antes?: string | null;
         durante?: string | null;

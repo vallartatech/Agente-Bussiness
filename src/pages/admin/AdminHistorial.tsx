@@ -572,49 +572,10 @@ const AdminHistorial: React.FC = () => {
             const pIdx = tarea.pointIndex;
             const wId = tarea.trabajoId;
 
-            // 1. Verificar si existe reporte específico de este sub-punto en localStorage (aislado por trabajoId)
-            const isSubPoint = Boolean(pIdx || (subId && subId.includes('_')));
-            const candidateKeys = [
-                wId && pIdx ? `report_data_${wId}_${pIdx}` : '',
-                wId && subId ? (subId.startsWith(`${wId}_`) ? `report_data_${subId}` : `report_data_${wId}_${subId}`) : '',
-                baseId && pIdx ? `report_data_${baseId}_${pIdx}` : '',
-                (!isSubPoint && wId) ? `report_data_${wId}` : ''
-            ].filter(Boolean);
-
-            for (const k of candidateKeys) {
-                const localData = localStorage.getItem(k);
-                if (localData) {
-                    try {
-                        const parsed = JSON.parse(localData);
-                        if (parsed && (parsed.imagenes || parsed.descripcion || parsed.reporteTienda)) {
-                            // Si firmaEmpresa está truncada o ausente, intentar obtenerla de la BD
-                            if (!parsed.firmaEmpresa || parsed.firmaEmpresa === '__PDF_LOADED_IN_STATE__') {
-                                try {
-                                    const apiReport = await getReporteByTrabajoId(tarea.trabajoId);
-                                    if (apiReport && apiReport.solucion) {
-                                        const apiParsed = typeof apiReport.solucion === 'string' ? JSON.parse(apiReport.solucion) : apiReport.solucion;
-                                        // Buscar firmaEmpresa en el sub-reporte o en la raíz
-                                        const apiMatched = findMatchingSubReport(apiParsed, { ...tarea, trabajoId: wId });
-                                        const firmaFromApi = apiMatched?.firmaEmpresa || apiParsed?.firmaEmpresa || null;
-                                        if (firmaFromApi && firmaFromApi !== '__PDF_LOADED_IN_STATE__') {
-                                            parsed.firmaEmpresa = firmaFromApi;
-                                        }
-                                    }
-                                } catch (_) {}
-                            }
-                            setReportData(parsed);
-                            return;
-                        }
-                    } catch (e) {
-                        console.error("Error al parsear reporte local:", e);
-                    }
-                }
-            }
-
             let matchedReport: any = null;
             let groupFirmaEmpresa: string | null = null;
 
-            // 2. Intentar cargar desde API con el trabajoId
+            // 1. Prioridad: Obtener reporte oficial de la Base de Datos
             try {
                 const apiReport = await getReporteByTrabajoId(tarea.trabajoId);
                 if (apiReport && apiReport.solucion) {
@@ -626,7 +587,7 @@ const AdminHistorial: React.FC = () => {
                 }
             } catch (_) {}
 
-            // 3. Si no se encontró y pertenece a un grupo REQ o baseId, buscar en los otros trabajos del grupo
+            // 2. Si no se encontró en la BD directa y pertenece a un grupo REQ o baseId, buscar en los otros trabajos del grupo
             if ((!matchedReport || !matchedReport.firmaEmpresa) && (tarea.baseId || tarea.rawJob?.descripcion)) {
                 const grpId = tarea.rawJob ? getGroupId(tarea.rawJob.descripcion) : null;
                 const searchJobIds = new Set<number>();
@@ -658,6 +619,32 @@ const AdminHistorial: React.FC = () => {
                 }
             }
 
+            // 3. Fallback a LocalStorage si no hubo respuesta del backend
+            if (!matchedReport) {
+                const isSubPoint = Boolean(pIdx || (subId && subId.includes('_')));
+                const candidateKeys = [
+                    wId && pIdx ? `report_data_${wId}_${pIdx}` : '',
+                    wId && subId ? (subId.startsWith(`${wId}_`) ? `report_data_${subId}` : `report_data_${wId}_${subId}`) : '',
+                    baseId && pIdx ? `report_data_${baseId}_${pIdx}` : '',
+                    (!isSubPoint && wId) ? `report_data_${wId}` : ''
+                ].filter(Boolean);
+
+                for (const k of candidateKeys) {
+                    const localData = localStorage.getItem(k);
+                    if (localData) {
+                        try {
+                            const parsed = JSON.parse(localData);
+                            if (parsed && (parsed.imagenes || parsed.descripcion || parsed.reporteTienda)) {
+                                matchedReport = parsed;
+                                break;
+                            }
+                        } catch (e) {
+                            console.error("Error al parsear reporte local:", e);
+                        }
+                    }
+                }
+            }
+
             if (matchedReport) {
                 const finalReport = {
                     ...matchedReport,
@@ -666,18 +653,25 @@ const AdminHistorial: React.FC = () => {
                     tecnicoNombre: matchedReport.tecnicoNombre || tarea.tecnico,
                     descripcion: matchedReport.descripcion || tarea.descripcion,
                     reporteTienda: matchedReport.reporteTienda || matchedReport.descripcion || tarea.titulo,
+                    materiales: matchedReport.materiales || '',
+                    refaccionesList: matchedReport.refaccionesList || [],
+                    observaciones: matchedReport.observaciones || '',
+                    observacionesList: matchedReport.observacionesList || [],
+                    involucraEquipo: matchedReport.involucraEquipo !== undefined ? matchedReport.involucraEquipo : Boolean(matchedReport.equipoInfo),
+                    equipoInfo: matchedReport.equipoInfo || null,
                     imagenes: {
                         antes: matchedReport.imagenes?.antes || null,
                         durante: matchedReport.imagenes?.durante || null,
                         despues: matchedReport.imagenes?.despues || null
                     },
+                    imagenesObservacion: matchedReport.imagenesObservacion || (matchedReport.imagenObservacion ? [matchedReport.imagenObservacion] : []),
                     firmaEmpresa: matchedReport.firmaEmpresa || groupFirmaEmpresa || null
                 };
                 setReportData(finalReport);
                 return;
             }
 
-            // 4. Fallback: construir reporte limpio con las fotos y datos del sub-punto correspondiente
+            // 4. Fallback base: construir reporte limpio con las fotos y datos del sub-punto correspondiente
             const rawJobPhotos = (tarea.rawJob?.foto_url ? (typeof tarea.rawJob.foto_url === 'string' && tarea.rawJob.foto_url.startsWith('[') ? JSON.parse(tarea.rawJob.foto_url) : [tarea.rawJob.foto_url]) : []) as string[];
             const taskPhotos = (tarea.photos && tarea.photos.length > 0) ? tarea.photos : (pIdx && rawJobPhotos[pIdx - 1] ? [rawJobPhotos[pIdx - 1]] : []);
 

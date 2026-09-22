@@ -15,6 +15,7 @@ import {
 } from 'react-icons/hi2';
 import ReportePDFPreview from '../../components/modals/ReportePDFPreview';
 import { findMatchingSubReport } from '../../utils/reportUtils';
+import { getNegocio } from '../../services/negociosService';
 
 const safeLocalStorageSet = (key: string, value: string) => {
     try {
@@ -132,6 +133,16 @@ const AdminReporte: React.FC = () => {
     const [fechaInicio, setFechaInicio] = useState<string>('');
     const [involucraEquipo, setInvolucraEquipo] = useState(false);
     const [showEquiposSection, setShowEquiposSection] = useState(false);
+    const [availableEquipos, setAvailableEquipos] = useState<{
+        id: string | number;
+        nombre: string;
+        marca: string;
+        modelo: string;
+        serie?: string;
+        area?: string;
+        foto?: string;
+    }[]>([]);
+    const [selectedEquipoIds, setSelectedEquipoIds] = useState<(string | number)[]>([]);
     const [equipoInfo, setEquipoInfo] = useState({
         tipo: 'Instalación',
         marca: '',
@@ -196,6 +207,8 @@ const AdminReporte: React.FC = () => {
             setFirmaEmpresa(null);
             setReporteId(null);
             setInvolucraEquipo(false);
+            setAvailableEquipos([]);
+            setSelectedEquipoIds([]);
             setEquipoInfo({
                 tipo: 'Instalación',
                 marca: '',
@@ -353,8 +366,74 @@ const AdminReporte: React.FC = () => {
                 // Determinar si la tarea actual requiere sección de equipo
                 const isEquipoTask = targetAct ? 
                     (targetAct.tipo === 'Mantenimiento' || targetAct.tipo === 'Instalacion' || targetAct.tipo === 'Instalación') :
-                    acts.some((a: any) => a.tipo === 'Mantenimiento' || a.tipo === 'Instalacion' || a.tipo === 'Instalación');
+                    (acts.some((a: any) => a.tipo === 'Mantenimiento' || a.tipo === 'Instalacion' || a.tipo === 'Instalación') || String(jobData.titulo || '').toLowerCase().includes('mantenimiento'));
                 setShowEquiposSection(isEquipoTask);
+
+                // 1.5 Descubrir equipos de la solicitud / sucursal
+                const equipMap = new Map();
+                const addEq = (eq: any) => {
+                    if (!eq) return;
+                    const key = eq.id ? String(eq.id) : (eq.nombre || eq.marca || JSON.stringify(eq));
+                    if (!equipMap.has(key)) {
+                        equipMap.set(key, {
+                            id: eq.id || key,
+                            nombre: eq.nombre || eq.marca || 'Equipo',
+                            marca: eq.marca || eq.nombre || '',
+                            modelo: eq.modelo || '',
+                            serie: eq.serie || '',
+                            area: eq.area || eq.levantamientoArea?.nombre || eq.levantamiento_area?.nombre || '',
+                            foto: eq.foto || eq.foto_url || ''
+                        });
+                    }
+                };
+
+                if (jobData.levantamiento_equipo || jobData.levantamientoEquipo) {
+                    addEq(jobData.levantamiento_equipo || jobData.levantamientoEquipo);
+                }
+                const jobSol = jobData.mantenimiento_solicitud_visita || jobData.mantenimientoSolicitudVisita || jobData.mantenimiento_solicitud_reparacion || jobData.mantenimientoSolicitudReparacion;
+                if (jobSol?.levantamiento_equipo || jobSol?.levantamientoEquipo) {
+                    addEq(jobSol.levantamiento_equipo || jobSol.levantamientoEquipo);
+                }
+
+                if (jobData.negocio_id) {
+                    try {
+                        const negRes = await getNegocio(jobData.negocio_id);
+                        const negData = negRes?.data || negRes;
+                        const lev = negData?.levantamiento || (Array.isArray(negData?.levantamientos) ? negData.levantamientos[0] : null);
+                        if (lev?.sections && Array.isArray(lev.sections)) {
+                            lev.sections.forEach((sec: any) => {
+                                if (sec.subAreas && Array.isArray(sec.subAreas)) {
+                                    sec.subAreas.forEach((sub: any) => {
+                                        if (sub.equipos && Array.isArray(sub.equipos)) {
+                                            sub.equipos.forEach((eq: any) => addEq({ ...eq, area: `${sec.nombreArea || ''} - ${sub.nombreSubArea || ''}`.trim() }));
+                                        }
+                                    });
+                                }
+                                if (sec.equipos && Array.isArray(sec.equipos)) {
+                                    sec.equipos.forEach((eq: any) => addEq({ ...eq, area: sec.nombreArea || '' }));
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.warn("Error fetching negocio equipments:", e);
+                    }
+                }
+
+                if (equipMap.size === 0 && jobData.descripcion && typeof jobData.descripcion === 'string' && jobData.descripcion.includes('[Equipo:')) {
+                    const match = jobData.descripcion.match(/\[Equipo:\s*(.+?)\]/);
+                    if (match && match[1]) {
+                        addEq({ id: 'desc_eq', nombre: match[1].trim(), marca: match[1].trim(), modelo: '' });
+                    }
+                }
+                if (equipMap.size === 0 && jobData.titulo) {
+                    const tMatch = jobData.titulo.match(/Mantenimiento\s*(?:\([^)]+\))?:\s*([^(]+)/i);
+                    if (tMatch && tMatch[1]) {
+                        addEq({ id: 'title_eq', nombre: tMatch[1].trim(), marca: tMatch[1].trim(), modelo: '' });
+                    }
+                }
+
+                const listEquips = Array.from(equipMap.values());
+                setAvailableEquipos(listEquips);
 
                 // 2. Cargar el borrador / reporte guardado de ESTA tarea específica
                 const subParam = subtareaIdParam ? String(subtareaIdParam) : null;
@@ -450,6 +529,17 @@ const AdminReporte: React.FC = () => {
                                 garantia: parsed.equipoInfo.garantia || ''
                             });
                         }
+                        if (parsed.selectedEquipoIds && Array.isArray(parsed.selectedEquipoIds)) {
+                            setSelectedEquipoIds(parsed.selectedEquipoIds);
+                        } else if (parsed.equipoInfo?.marca || parsed.equipoInfo?.modelo) {
+                            const matching = listEquips.filter(eq => 
+                                (eq.marca && parsed.equipoInfo.marca.includes(eq.marca)) || 
+                                (eq.nombre && parsed.equipoInfo.marca.includes(eq.nombre))
+                            );
+                            if (matching.length > 0) {
+                                setSelectedEquipoIds(matching.map(m => m.id));
+                            }
+                        }
                         setRefaccionesList(parsed.refaccionesList && parsed.refaccionesList.length > 0 ? parsed.refaccionesList : taskRefactions);
                     } catch (err) {
                         console.error("Error al parsear el reporte local de la tarea:", err);
@@ -468,8 +558,23 @@ const AdminReporte: React.FC = () => {
                     setImagenes({ antes: null, durante: null, despues: null });
                     setObservacionesList([]);
                     setFirmaEmpresa(null);
-                    setInvolucraEquipo(false);
                     setRefaccionesList(taskRefactions);
+
+                    // Auto-selección inicial si hay equipos disponibles y es mantenimiento
+                    if (listEquips.length > 0 && (String(jobData.titulo || '').toLowerCase().includes('mantenimiento') || isEquipoTask)) {
+                        const firstEq = listEquips[0];
+                        setSelectedEquipoIds([firstEq.id]);
+                        setEquipoInfo({
+                            tipo: 'Mantenimiento',
+                            marca: firstEq.marca || firstEq.nombre || '',
+                            modelo: firstEq.modelo || '',
+                            piezas: '',
+                            garantia: ''
+                        });
+                        setInvolucraEquipo(true);
+                    } else {
+                        setInvolucraEquipo(false);
+                    }
                 }
             } catch (err) {
                 console.error("Error al obtener datos de la tarea para el reporte:", err);
@@ -512,6 +617,7 @@ const AdminReporte: React.FC = () => {
                 observacionesList: filteredObsList,
                 firmaEmpresa,
                 involucraEquipo,
+                selectedEquipoIds,
                 equipoInfo: involucraEquipo ? equipoInfo : null,
                 fecha: new Date().toLocaleDateString('es-MX'),
                 tecnicoNombre: trabajoBase?.trabajador?.nombre || user?.name || trabajoBase?.tecnico || 'Técnico',
@@ -555,6 +661,37 @@ const AdminReporte: React.FC = () => {
 
     const handleEquipoInfoChange = (field: string, value: string) => {
         setEquipoInfo(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleToggleSelectEquipo = (eq: any) => {
+        setSelectedEquipoIds(prev => {
+            const exists = prev.some(id => String(id) === String(eq.id));
+            const next = exists 
+                ? prev.filter(id => String(id) !== String(eq.id))
+                : [...prev, eq.id];
+            
+            const selectedObjects = availableEquipos.filter(item => next.some(id => String(id) === String(item.id)));
+            
+            if (selectedObjects.length > 0) {
+                const combinedMarcas = selectedObjects.map(o => o.marca || o.nombre).filter(Boolean).join(', ');
+                const combinedModelos = selectedObjects.map(o => o.modelo).filter(Boolean).join(', ');
+                setEquipoInfo(current => ({
+                    ...current,
+                    tipo: 'Mantenimiento',
+                    marca: combinedMarcas,
+                    modelo: combinedModelos
+                }));
+                setInvolucraEquipo(true);
+            } else {
+                setEquipoInfo(current => ({
+                    ...current,
+                    marca: '',
+                    modelo: ''
+                }));
+            }
+
+            return next;
+        });
     };
 
     const antesInputRef = useRef<HTMLInputElement>(null);
@@ -665,6 +802,7 @@ const AdminReporte: React.FC = () => {
             observacionesList: filteredObsList,
             firmaEmpresa,
             involucraEquipo,
+            selectedEquipoIds,
             equipoInfo: involucraEquipo ? equipoInfo : null,
             fecha: new Date().toLocaleDateString('es-MX'),
             tecnicoNombre: trabajoBase?.trabajador?.nombre || user?.name || trabajoBase?.tecnico || 'Técnico',
@@ -1119,7 +1257,7 @@ const AdminReporte: React.FC = () => {
                                                 onChange={(e) => setInvolucraEquipo(e.target.checked)} 
                                                 style={{ width: '18px', height: '18px', accentColor: '#f26522', cursor: 'pointer' }}
                                             />
-                                            Registrar equipo
+                                            Registrar / Vincular equipo
                                         </label>
                                     </div>
 
@@ -1150,9 +1288,70 @@ const AdminReporte: React.FC = () => {
                                                 </button>
                                             </div>
 
+                                            {/* SELECTOR INTERACTIVO DE EQUIPOS DEL NEGOCIO / SOLICITUD */}
+                                            {equipoInfo.tipo === 'Mantenimiento' && availableEquipos.length > 0 && (
+                                                <div style={{ marginBottom: '14px', background: '#fff7ed', padding: '12px', borderRadius: '12px', border: '1.5px solid #fed7aa' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                                            📋 Equipos de la Solicitud ({availableEquipos.length})
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', color: '#ea580c', fontWeight: '700' }}>
+                                                            {selectedEquipoIds.length === 0 ? 'Ninguno seleccionado' : `${selectedEquipoIds.length} seleccionado(s)`}
+                                                        </span>
+                                                    </div>
+                                                    <p style={{ margin: '0 0 10px 0', fontSize: '11.5px', color: '#9a3412' }}>
+                                                        Marca o desmarca los equipos a los que se les realizó este mantenimiento para auto-llenar los datos:
+                                                    </p>
+
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+                                                        {availableEquipos.map((eq) => {
+                                                            const isSelected = selectedEquipoIds.some(id => String(id) === String(eq.id));
+                                                            return (
+                                                                <div
+                                                                    key={eq.id}
+                                                                    onClick={() => handleToggleSelectEquipo(eq)}
+                                                                    style={{
+                                                                        padding: '9px 12px',
+                                                                        borderRadius: '10px',
+                                                                        border: isSelected ? '2px solid #f26522' : '1.5px solid #e2e8f0',
+                                                                        background: isSelected ? '#ffffff' : '#f8fafc',
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '10px',
+                                                                        transition: 'all 0.15s ease',
+                                                                        boxShadow: isSelected ? '0 2px 8px rgba(242, 101, 34, 0.2)' : 'none'
+                                                                    }}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isSelected}
+                                                                        onChange={() => {}} // controlado por el click del contenedor
+                                                                        style={{ width: '16px', height: '16px', accentColor: '#f26522', cursor: 'pointer', flexShrink: 0 }}
+                                                                    />
+                                                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                                                        <div style={{ fontSize: '13px', fontWeight: '800', color: isSelected ? '#ea580c' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                            {eq.nombre}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                            {eq.marca ? `Marca: ${eq.marca}` : ''} {eq.modelo ? `| Mod: ${eq.modelo}` : ''}
+                                                                        </div>
+                                                                        {eq.area && (
+                                                                            <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic', marginTop: '2px' }}>
+                                                                                📍 {eq.area}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                                 <div className={styles.inputGroup} style={{ marginBottom: '10px' }}>
-                                                    <label className={styles.label}>Marca:</label>
+                                                    <label className={styles.label}>Marca(s):</label>
                                                     <input
                                                         type="text"
                                                         className={styles.input}
@@ -1162,7 +1361,7 @@ const AdminReporte: React.FC = () => {
                                                     />
                                                 </div>
                                                 <div className={styles.inputGroup} style={{ marginBottom: '10px' }}>
-                                                    <label className={styles.label}>Modelo:</label>
+                                                    <label className={styles.label}>Modelo(s):</label>
                                                     <input
                                                         type="text"
                                                         className={styles.input}

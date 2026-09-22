@@ -7,7 +7,7 @@ export interface Trabajo {
     tecnico: string;
     tecnicoUserId?: number; // Permite un tracking fidedigno del técnico asignado
     fecha: string; // Formato DD/MM/YYYY
-    estado: "En Espera" | "Finalizado" | "En Proceso" | "Asignado" | "Solicitud" | "Cotización Enviada" | "Cotización Aceptada" | "Cotización Rechazada" | "Cotización Aprobada" | "Eliminado" | "Completado";
+    estado: "En Espera" | "Finalizado" | "En Proceso" | "Asignado" | "Solicitud" | "Cotización Enviada" | "Cotización Aceptada" | "Cotización Rechazada" | "Recotización Solicitada" | "Cotización Aprobada" | "Eliminado" | "Completado" | string;
     tipo?: "Visita" | "Trabajo" | "Nueva Solicitud" | "SOS" | "Mantenimiento";
     visitado?: boolean;
     descripcion?: string;

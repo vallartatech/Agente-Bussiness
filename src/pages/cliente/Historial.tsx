@@ -705,11 +705,18 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                     tecnicoNombre: matchedReport.tecnicoNombre || tarea.tecnico,
                     descripcion: matchedReport.descripcion || tarea.descripcion,
                     reporteTienda: matchedReport.reporteTienda || matchedReport.descripcion || tarea.titulo,
+                    materiales: matchedReport.materiales || '',
+                    refaccionesList: matchedReport.refaccionesList || [],
+                    observaciones: matchedReport.observaciones || '',
+                    observacionesList: matchedReport.observacionesList || [],
+                    involucraEquipo: matchedReport.involucraEquipo !== undefined ? matchedReport.involucraEquipo : Boolean(matchedReport.equipoInfo),
+                    equipoInfo: matchedReport.equipoInfo || null,
                     imagenes: {
                         antes: matchedReport.imagenes?.antes || null,
                         durante: matchedReport.imagenes?.durante || null,
                         despues: matchedReport.imagenes?.despues || null
                     },
+                    imagenesObservacion: matchedReport.imagenesObservacion || (matchedReport.imagenObservacion ? [matchedReport.imagenObservacion] : []),
                     firmaEmpresa: matchedReport.firmaEmpresa || groupFirmaEmpresa || null
                 };
                 setReportData(finalReport);

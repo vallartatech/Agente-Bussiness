@@ -2,7 +2,6 @@ import React, { useRef, useState, useEffect } from 'react';
 import { HiOutlineXMark, HiOutlinePrinter, HiOutlineArrowDownTray, HiOutlinePhoto, HiOutlinePaperAirplane } from 'react-icons/hi2';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { generateMaintenanceReportPDF } from '../../utils/pdfGenerator';
 
 const getAvatarForTech = (nombre: string) => {
     if (!nombre || nombre.toLowerCase() === "sin asignar") return null;
@@ -792,9 +791,6 @@ export default function ReportePDFPreview({ trabajo, reporteData, subTareas, isV
                             <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginTop: '15px' }}>
                                 <div style={{ textAlign: 'center', width: '200px' }}>
                                     <div style={{ borderBottom: '1px solid #475569', height: '60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '5px' }}>
-                                        {reporteData.firmaEmpresa && !reporteData.firmaEmpresa.startsWith('data:application/pdf') && (
-                                            <img src={reporteData.firmaEmpresa} alt="Firma" style={{ maxHeight: '55px', maxWidth: '180px', objectFit: 'contain' }} />
-                                        )}
                                     </div>
                                     <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 'bold', display: 'block', marginTop: '6px' }}>FIRMA ENCARGADO / SUCURSAL</span>
                                 </div>
@@ -1059,7 +1055,7 @@ export default function ReportePDFPreview({ trabajo, reporteData, subTareas, isV
                                         <p style={{ margin: 0, fontSize: '11px', color: '#475569', whiteSpace: 'pre-wrap' }}>{reporteData.observaciones}</p>
                                         {((reporteData.imagenesObservacion && reporteData.imagenesObservacion.length > 0) || reporteData.imagenObservacion) && (
                                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                                {(reporteData.imagenesObservacion || [reporteData.imagenObservacion]).filter(Boolean).map((img, imgIdx) => (
+                                                {(reporteData.imagenesObservacion || [reporteData.imagenObservacion]).filter((img): img is string => Boolean(img)).map((img: string, imgIdx: number) => (
                                                     <img key={imgIdx} src={img} alt={`Extra ${imgIdx + 1}`} style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }} />
                                                 ))}
                                             </div>

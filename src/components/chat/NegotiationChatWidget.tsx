@@ -146,19 +146,19 @@ const NegotiationChatWidget: React.FC<ChatProps> = ({
         };
     }, [trabajoId, activeCanal, isSOS, isOpen]);
 
-    useEffect(() => {
-        if (isOpen) {
-            scrollToBottom();
-            setUnreadCount(0);
-        }
-    }, [messages, isOpen]);
-
     const scrollToBottom = () => {
         const chatBody = messagesEndRef.current?.parentElement;
         if (chatBody) {
             chatBody.scrollTop = chatBody.scrollHeight;
         }
     };
+
+    useEffect(() => {
+        if (isOpen) {
+            scrollToBottom();
+            setUnreadCount(0);
+        }
+    }, [messages, isOpen]);
 
     const handleSendMessage = async () => {
         const text = inputText.trim();

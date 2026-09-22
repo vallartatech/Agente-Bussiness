@@ -28,6 +28,7 @@ const getBarClass = (job: Trabajo, userRole: string, styles: Record<string, stri
     if (status === 'finalizado') return styles.green;
     if (status === 'rechazado por técnico' || status === 'rechazado por tecnico') return styles.red;
     if (job.tipo === 'SOS') return styles.red;
+    if (status.includes('recotiz')) return styles.orange;
     if (status.includes('cotizaci')) {
         if (status.includes('aceptada') || status.includes('aprobada')) return styles.green;
         if (status.includes('rechazada')) return styles.red;
@@ -58,6 +59,7 @@ const getStatusText = (job: Trabajo, userRole: string): string => {
     if (status === 'rechazado por técnico' || status === 'rechazado por tecnico')
         return userRole === 'tecnico' ? 'RECHAZASTE ESTA ASIGNACIÓN' : 'RECHAZADO POR TÉCNICO';
     if (job.tipo === 'SOS') return '¡ALERTA SOS!';
+    if (status.includes('recotiz')) return 'RECOTIZACIÓN SOLICITADA';
     if (status.includes('cotizaci')) {
         if (status.includes('aceptada') || status.includes('aprobada')) return 'COTIZACIÓN ACEPTADA';
         if (status.includes('rechazada')) return 'COTIZACIÓN RECHAZADA';
@@ -85,15 +87,18 @@ const getStatusText = (job: Trabajo, userRole: string): string => {
 };
 
 const getAccentForStatus = (estado: string) => {
-    if (['Solicitud', 'Pendiente'].includes(estado))
+    const s = (estado || '').toLowerCase();
+    if (s.includes('recotiz'))
+        return { grad: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', shadow: 'rgba(245,158,11,0.35)', dot: '🔁' };
+    if (['solicitud', 'pendiente'].includes(s))
         return { grad: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', shadow: 'rgba(245,158,11,0.35)', dot: '🟡' };
-    if (['Cotización Enviada', 'Cotización Aceptada'].includes(estado))
+    if (['cotización enviada', 'cotizacion enviada', 'cotización aceptada', 'cotizacion aceptada'].includes(s))
         return { grad: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', shadow: 'rgba(59,130,246,0.35)', dot: '🔵' };
-    if (['Aceptada', 'Asignado', 'En Espera'].includes(estado))
+    if (['aceptada', 'asignado', 'en espera'].includes(s))
         return { grad: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)', shadow: 'rgba(249,115,22,0.35)', dot: '🟠' };
-    if (estado === 'En Proceso')
+    if (s === 'en proceso')
         return { grad: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', shadow: 'rgba(16,185,129,0.35)', dot: '🟢' };
-    if (['Finalizado', 'Completado'].includes(estado))
+    if (['finalizado', 'completado'].includes(s))
         return { grad: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', shadow: 'rgba(139,92,246,0.35)', dot: '🟣' };
     return { grad: 'linear-gradient(135deg, #64748b 0%, #475569 100%)', shadow: 'rgba(100,116,139,0.35)', dot: '⚪' };
 };
@@ -245,7 +250,7 @@ const JobCard: React.FC<JobCardProps> = ({
                             </div>
 
                             {/* Cotización */}
-                            {((['Cotización Enviada', 'Cotización Aceptada', 'Cotización Rechazada', 'Cotización'].includes(trabajo.estado) || trabajo.estado.toLowerCase().includes('cotizaci')) && trabajo.cotizacion) && (
+                            {((['Cotización Enviada', 'Cotización Aceptada', 'Cotización Rechazada', 'Recotización Solicitada', 'Cotización'].includes(trabajo.estado) || trabajo.estado.toLowerCase().includes('cotizaci') || trabajo.estado.toLowerCase().includes('recotiz')) && trabajo.cotizacion) && (
                                 <div className={styles.cotizacionPreviewBox} onClick={e => e.stopPropagation()}>
                                     <p className={styles.cotizacionPreviewText}>
                                         {userRole === 'admin' ? '💰 Cotización Enviada' : '💰 Cotización del Trabajo'}: ${trabajo.cotizacion.costo}
