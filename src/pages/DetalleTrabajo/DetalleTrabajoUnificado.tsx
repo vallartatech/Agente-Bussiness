@@ -1384,6 +1384,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     }));
                 }
 
+                // Si el trabajo quedó marcado como 'Cotización Aceptada' pero no tiene cotizaciones guardadas o aprobadas por cliente, restaurar a 'En Espera'
+                if (mappedJob && (mappedJob.estado === 'Cotización Aceptada' || mappedJob.estado === 'Cotización Aprobada')) {
+                    try {
+                        const existingCotiz = await getCotizaciones(Number(id));
+                        const hasApprovedCotiz = Array.isArray(existingCotiz) && existingCotiz.some((c: any) => c.estado === 'Aprobada');
+                        if (!hasApprovedCotiz && (!existingCotiz || existingCotiz.length === 0)) {
+                            mappedJob.estado = 'En Espera';
+                            updateEstadoTrabajo(Number(id), { estado: 'En Espera' }).catch(() => {});
+                        }
+                    } catch (_) {}
+                }
+
                 setTrabajo(mappedJob as any);
 
                 // Ajuste inteligente de pestaña según el estado del trabajo y rol
@@ -5752,26 +5764,24 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         {(() => {
                             const getStepIndex = (estado: string) => {
                                 if (estado === "Finalizado" || estado === "Completado") return 5;
-                                // Si el estado explícito dice que está en cotización o se acaba de rechazar
+                                if (estado === "En Ejecución") return 4;
+
+                                // Solo pasa al paso 4 si el cliente ya aprobó una propuesta formal enviada y se programó fecha/hora o se pasó a ejecución
+                                const hasClientApprovedQuote = cotizaciones.some(c => c.estado === 'Aprobada');
+                                if (hasClientApprovedQuote && (trabajo.fecha_programada || trabajo.hora_programada || estado === 'En Ejecución')) {
+                                    return 4;
+                                }
+
                                 if (estado.includes("Cotización") || estado === "Pendiente de Cotizar" || estado === "Rechazada") {
-                                    if (estado === 'Cotización Aceptada' || estado === 'Cotización Aprobada') return 4;
                                     return 3;
                                 }
 
-                                // Si el trabajo es Visita o SOS, verificamos si ya se aprobó la cotización PERO solo si el estado global no es explícitamente anterior
+                                // Si el trabajo es Visita o SOS
                                 if (trabajo.tipo === "Visita" || isSOS) {
-                                    // Si globalmente está Asignado, En Proceso, En Espera y la visita no ha terminado (o se mandó a revisión)
                                     if (["En Proceso", "En Espera", "Asignado"].includes(estado)) {
-                                        const hasApprovedQuote = subTareas.some(t => t.cotizacionEstado === 'Aprobada') || cotizaciones.some(c => c.estado === 'Aprobada');
-                                        if (hasApprovedQuote) return 4;
-                                        if (trabajo.visitado && estado === "En Espera") return 3;
+                                        if (trabajo.visitado || cotizaciones.length > 0 || subTareas.some(t => t.quoteData || t.esCotizacion)) return 3;
                                         return 2;
                                     }
-                                    if (estado === "En Ejecución") return 4;
-
-                                    const hasApprovedQuote = subTareas.some(t => t.cotizacionEstado === 'Aprobada') || cotizaciones.some(c => c.estado === 'Aprobada');
-                                    if (hasApprovedQuote) return 4;
-
                                     return 1;
                                 }
 
@@ -5995,8 +6005,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     </div>
                     {activeTab === 'Datos' && (
                         <div className={styles.bentoGrid}>
-                            {/* BANNER 1: CONFIRMACIÓN DE FECHA Y HORA DE EJECUCIÓN (COTIZACIÓN ACEPTADA) */}
-                            {['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución', 'En Proceso'].includes(trabajo.estado) && (
+                            {/* BANNER 1: CONFIRMACIÓN DE FECHA Y HORA DE EJECUCIÓN (COTIZACIÓN ACEPTADA POR CLIENTE) */}
+                            {['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución', 'En Proceso'].includes(trabajo.estado) && (cotizaciones.some(c => c.estado === 'Aprobada') || (trabajo.fecha_programada && trabajo.hora_programada)) && (
                                 <div
                                     className={`${styles.bentoCard} ${styles.colSpan12}`}
                                     style={{
@@ -8126,8 +8136,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                         </div>
                                                     )}
 
-                                                    {/* BOTÓN DE ASIGNACIÓN CUANDO SE ACEPTA LA COTIZACIÓN (SOLO FLUJO NORMAL, NO SOS) */}
-                                                    {!isSOS && (trabajo?.estado === 'Cotización Aceptada' || trabajo?.estado === 'Cotización Aprobada') && (user?.role === 'admin' || isAutonomoAdmin(user?.role)) && (
+                                                    {/* BOTÓN DE ASIGNACIÓN CUANDO SE ACEPTA LA COTIZACIÓN (SOLO FLUJO NORMAL, NO SOS, Y SI EL CLIENTE YA APROBÓ) */}
+                                                    {!isSOS && (cotizaciones.some(c => c.estado === 'Aprobada') || (trabajo?.estado === 'Cotización Aceptada' && cotizaciones.length > 0)) && (user?.role === 'admin' || isAutonomoAdmin(user?.role)) && (
                                                         <button onClick={handleOpenAssignModal}
                                                             style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', borderRadius: '15px', fontSize: '15px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 8px 20px rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' }}>
                                                             <span style={{ fontSize: '18px' }}>✅</span> Asignar Trabajo al Técnico
@@ -8927,27 +8937,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                             <button
                                                                                                                                                 onClick={async () => {
                                                                                                                     try {
-                                                                                                                        const targetTechName = tarea.tecnicoNombre || trabajo?.tecnico || subTareas[0]?.tecnicoNombre || 'Jesus Escalante';
-                                                                                                                        const targetTrabajadorId = tarea.trabajadorId || tarea.trabajador_id || trabajo?.trabajador_id || (trabajo as any)?.trabajador?.id || 1;
-
-                                                                                                                        await updateTrabajo(trabajo!.id, {
-                                                                                                                            estado: 'Cotización Aceptada',
-                                                                                                                            tecnico: targetTechName,
-                                                                                                                            trabajador_id: targetTrabajadorId
-                                                                                                                        });
-                                                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Cotización Aceptada' });
-
-                                                                                                                        // Actualizar cotizaciones en backend a Aprobada
-                                                                                                                        if (cotizaciones.length > 0) {
-                                                                                                                            for (const c of cotizaciones) {
-                                                                                                                                if (c.id) {
-                                                                                                                                    try {
-                                                                                                                                        await updateCotizacionStatus(c.id, 'Aprobada');
-                                                                                                                                    } catch (_) { }
-                                                                                                                                }
-                                                                                                                            }
-                                                                                                                            setCotizaciones(prev => prev.map(c => ({ ...c, estado: 'Aprobada' as const })));
-                                                                                                                        }
+                                                                                                                        // 📥 IMPORTAR DATOS DE LA COTIZACIÓN DEL TÉCNICO A "ELABORACIÓN DE PROPUESTAS"
 
                                                                                                                         // 📥 IMPORTAR DATOS DE LA COTIZACIÓN DEL TÉCNICO A "ELABORACIÓN DE PROPUESTAS"
                                                                                                                         const mappedProposals: CotizacionFormItem[] = [];
@@ -9026,43 +9016,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                             setCotizacionesFormItems(mappedProposals);
                                                                                                                         }
 
-                                                                                                                        // Notificar al técnico autónomo con enlace directo a la pestaña de Trabajo
-                                                                                                                        try {
-                                                                                                                            const targetTechUserId = (trabajo as any)?.tecnicoUserId || (trabajo as any)?.trabajador?.user_id || tecnicosData.find((t: any) => t.id === targetTrabajadorId)?.user_id;
-                                                                                                                            if (targetTechUserId) {
-                                                                                                                                await createNotificacion({
-                                                                                                                                    user_id: targetTechUserId,
-                                                                                                                                    titulo: '🎉 Cotización Aceptada',
-                                                                                                                                    mensaje: `El administrador general aceptó tu cotización para "${trabajo?.sucursal || ''}". Ingresa a la pestaña Trabajo para definir tu día y hora de ejecución.`,
-                                                                                                                                    enlace: `/tecnico-autonomo/trabajo-detalle/${trabajo!.id}?tab=trabajo`
-                                                                                                                                });
-                                                                                                                            } else {
-                                                                                                                                await createNotificacionByRole({
-                                                                                                                                    role: 'tecnico',
-                                                                                                                                    titulo: '🎉 Cotización Aceptada',
-                                                                                                                                    mensaje: `El administrador general aceptó la cotización para "${trabajo?.sucursal || ''}". Ingresa a la pestaña Trabajo para definir día y hora de ejecución.`,
-                                                                                                                                    enlace: `/tecnico-autonomo/trabajo-detalle/${trabajo!.id}?tab=trabajo`
-                                                                                                                                });
-                                                                                                                            }
-                                                                                                                        } catch (notiErr) {
-                                                                                                                            console.error("Error enviando notificación al técnico:", notiErr);
-                                                                                                                        }
-
+                                                                                                                        // Marcar la cotización del técnico como aceptada por el admin
                                                                                                                         setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Aprobada' as any } : t));
-                                                                                                                        setTrabajo(prev => prev ? {
-                                                                                                                            ...prev,
-                                                                                                                            estado: 'Cotización Aceptada',
-                                                                                                                            tecnico: targetTechName,
-                                                                                                                            trabajador_id: targetTrabajadorId
-                                                                                                                        } : prev);
+                                                                                                                        setShowAddQuoteForm(true);
+                                                                                                                        setActiveTab('Cotización');
 
-                                                                                                                        if (activeTab === 'Registro') {
-                                                                                                                            setActiveTab('Datos');
-                                                                                                                        }
-
-                                                                                                                        showAlert('Cotización Aceptada', `Has aceptado la cotización de ${targetTechName}. Los conceptos, montos y materiales se importaron a "Elaboración de Propuestas" para que formules la cotización final al cliente.`, 'success');
+                                                                                                                        showAlert('Cotización Importada', `Se importaron las ${mappedProposals.length} propuestas del técnico en "Elaboración de Propuestas". Puedes ajustar los precios antes de enviarla al cliente.`, 'success');
                                                                                                                     } catch (error) {
-                                                                                                                        showAlert('Error', 'Hubo un problema al actualizar el estado del trabajo.', 'error');
+                                                                                                                        showAlert('Error', 'Hubo un problema al importar la cotización.', 'error');
                                                                                                                     }
                                                                                                                 }}
                                                                                                                 style={{ flex: 1, padding: '10px 14px', background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s' }}
