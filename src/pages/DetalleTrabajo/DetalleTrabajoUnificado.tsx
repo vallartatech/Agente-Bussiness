@@ -1966,16 +1966,20 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     // Estructura Unificada de Puntos de Servicio Categorizados por el Técnico
     const categorizedServicePoints = useMemo(() => {
         const pointsList: {
+            index: number;
             puntoIndex: number;
             categoria: string;
             rawCategory: string;
+            title: string;
             titulo: string;
             descripcion: string;
             manoObra: number;
-            materiales: { material: string; piezas: string; precio: string }[];
+            conceptos: any[];
+            materiales: any[];
+            subtotal: number;
+            total: number;
             foto?: string;
             equip?: { nombre: string; marca: string; modelo: string; area?: string };
-            total: number;
         }[] = [];
 
         const techTask = subTareas.find(t => t.esCotizacion || t.quoteData || t.serviceData);
@@ -2001,12 +2005,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const qItem = qData?.itemsQuote?.find((qi: any) => qi.puntoIndex === pIdx) || qData?.itemsQuote?.[idx];
                 
                 const cManoObra = (it.quoteConceptos || qItem?.conceptos || []).reduce((sum: number, c: any) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
-                const mats = (it.quoteMateriales || qItem?.materiales || []).map((m: any) => ({
+                const ptConceptos = (it.quoteConceptos || qItem?.conceptos || []).length > 0
+                    ? (it.quoteConceptos || qItem?.conceptos)
+                    : [{ descripcion: it.descripcion || `Punto ${pIdx}`, cantidad: 1, precio: cManoObra }];
+
+                const ptMateriales = (it.quoteMateriales || qItem?.materiales || []).map((m: any) => ({
+                    nombre: m.nombre || m.material || '',
                     material: m.nombre || m.material || '',
+                    cantidad: String(m.cantidad || m.piezas || '1'),
                     piezas: String(m.cantidad || m.piezas || '1'),
                     precio: String(m.precio || '0')
                 }));
-                const matsTotal = mats.reduce((sum: number, m: any) => sum + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+                const matsTotal = ptMateriales.reduce((sum: number, m: any) => sum + ((parseFloat(m.precio) || 0) * (parseFloat(m.cantidad) || 1)), 0);
 
                 const itemPhoto = it.foto || photosArr[idx] || actualRep?.taskItems?.[idx]?.foto || taskItems?.[idx]?.foto;
 
@@ -2018,17 +2028,23 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     area: maintenanceEquipmentList?.[0]?.area || ''
                 } : undefined;
 
+                const pTitle = it.descripcion || `Punto ${pIdx}`;
+
                 pointsList.push({
+                    index: pIdx,
                     puntoIndex: pIdx,
                     categoria: catInfo.label,
                     rawCategory: catInfo.raw,
-                    titulo: it.descripcion || `Punto ${pIdx}`,
+                    title: pTitle,
+                    titulo: pTitle,
                     descripcion: it.descripcion || '',
                     manoObra: cManoObra,
-                    materiales: mats,
+                    conceptos: ptConceptos,
+                    materiales: ptMateriales,
+                    subtotal: cManoObra + matsTotal,
+                    total: cManoObra + matsTotal,
                     foto: itemPhoto,
-                    equip: equip,
-                    total: cManoObra + matsTotal
+                    equip: equip
                 });
             });
         } else if (qData?.itemsQuote && Array.isArray(qData.itemsQuote) && qData.itemsQuote.length > 0) {
@@ -2036,12 +2052,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const pIdx = qItem.puntoIndex || (idx + 1);
                 const catInfo = getCategoryBadgeInfo(qItem.tipo || qItem.tipoActividad);
                 const cManoObra = (qItem.conceptos || []).reduce((sum: number, c: any) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
-                const mats = (qItem.materiales || []).map((m: any) => ({
+                const ptConceptos = (qItem.conceptos || []).length > 0
+                    ? qItem.conceptos
+                    : [{ descripcion: qItem.descripcion || `Punto ${pIdx}`, cantidad: 1, precio: cManoObra }];
+
+                const ptMateriales = (qItem.materiales || []).map((m: any) => ({
+                    nombre: m.nombre || m.material || '',
                     material: m.nombre || m.material || '',
+                    cantidad: String(m.cantidad || m.piezas || '1'),
                     piezas: String(m.cantidad || m.piezas || '1'),
                     precio: String(m.precio || '0')
                 }));
-                const matsTotal = mats.reduce((sum: number, m: any) => sum + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+                const matsTotal = ptMateriales.reduce((sum: number, m: any) => sum + ((parseFloat(m.precio) || 0) * (parseFloat(m.cantidad) || 1)), 0);
                 const itemPhoto = photosArr[idx] || actualRep?.taskItems?.[idx]?.foto || taskItems?.[idx]?.foto;
 
                 const isMaint = catInfo.raw.toLowerCase().includes('manten');
@@ -2052,17 +2074,23 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     area: maintenanceEquipmentList?.[0]?.area || ''
                 } : undefined;
 
+                const pTitle = qItem.descripcion || `Punto ${pIdx}`;
+
                 pointsList.push({
+                    index: pIdx,
                     puntoIndex: pIdx,
                     categoria: catInfo.label,
                     rawCategory: catInfo.raw,
-                    titulo: qItem.descripcion || `Punto ${pIdx}`,
+                    title: pTitle,
+                    titulo: pTitle,
                     descripcion: qItem.descripcion || '',
                     manoObra: cManoObra,
-                    materiales: mats,
+                    conceptos: ptConceptos,
+                    materiales: ptMateriales,
+                    subtotal: cManoObra + matsTotal,
+                    total: cManoObra + matsTotal,
                     foto: itemPhoto,
-                    equip: equip,
-                    total: cManoObra + matsTotal
+                    equip: equip
                 });
             });
         } else if (actualRep?.taskItems && Array.isArray(actualRep.taskItems) && actualRep.taskItems.length > 0) {
@@ -2078,17 +2106,23 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     area: maintenanceEquipmentList?.[0]?.area || ''
                 } : undefined;
 
+                const pTitle = tIt.descripcion || `Punto ${pIdx}`;
+
                 pointsList.push({
+                    index: pIdx,
                     puntoIndex: pIdx,
                     categoria: catInfo.label,
                     rawCategory: catInfo.raw,
-                    titulo: tIt.descripcion || `Punto ${pIdx}`,
+                    title: pTitle,
+                    titulo: pTitle,
                     descripcion: tIt.descripcion || '',
                     manoObra: 0,
+                    conceptos: [{ descripcion: pTitle, cantidad: 1, precio: 0 }],
                     materiales: [],
+                    subtotal: 0,
+                    total: 0,
                     foto: itemPhoto,
-                    equip: equip,
-                    total: 0
+                    equip: equip
                 });
             });
         } else {
@@ -2113,17 +2147,24 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         area: maintenanceEquipmentList?.[0]?.area || ''
                     } : undefined;
 
+                    const pTitle = titleRaw || `Punto ${pIdx}`;
+                    const pMonto = idx === 0 && techTask?.cotizacionMonto ? Number(String(techTask.cotizacionMonto).replace(/[^0-9.]/g, '')) || 0 : 0;
+
                     pointsList.push({
+                        index: pIdx,
                         puntoIndex: pIdx,
                         categoria: catInfo.label,
                         rawCategory: catInfo.raw,
-                        titulo: titleRaw || `Punto ${pIdx}`,
+                        title: pTitle,
+                        titulo: pTitle,
                         descripcion: titleRaw || block,
-                        manoObra: idx === 0 && techTask?.cotizacionMonto ? Number(String(techTask.cotizacionMonto).replace(/[^0-9.]/g, '')) || 0 : 0,
+                        manoObra: pMonto,
+                        conceptos: [{ descripcion: pTitle, cantidad: 1, precio: pMonto }],
                         materiales: [],
+                        subtotal: pMonto,
+                        total: pMonto,
                         foto: itemPhoto,
-                        equip: equip,
-                        total: idx === 0 && techTask?.cotizacionMonto ? Number(String(techTask.cotizacionMonto).replace(/[^0-9.]/g, '')) || 0 : 0
+                        equip: equip
                     });
                 });
             } else if (subTareas.length > 0) {
@@ -2139,17 +2180,24 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         area: maintenanceEquipmentList?.[0]?.area || ''
                     } : undefined;
 
+                    const pTitle = st.cleanDescripcion || st.descripcion || st.titulo || `Punto ${pIdx}`;
+                    const pMonto = Number(String(st.cotizacionMonto || '0').replace(/[^0-9.]/g, '')) || 0;
+
                     pointsList.push({
+                        index: pIdx,
                         puntoIndex: pIdx,
                         categoria: catInfo.label,
                         rawCategory: catInfo.raw,
-                        titulo: st.cleanDescripcion || st.descripcion || st.titulo || `Punto ${pIdx}`,
+                        title: pTitle,
+                        titulo: pTitle,
                         descripcion: st.cleanDescripcion || st.descripcion || '',
-                        manoObra: Number(String(st.cotizacionMonto || '0').replace(/[^0-9.]/g, '')) || 0,
+                        manoObra: pMonto,
+                        conceptos: [{ descripcion: pTitle, cantidad: 1, precio: pMonto }],
                         materiales: [],
+                        subtotal: pMonto,
+                        total: pMonto,
                         foto: itemPhoto,
-                        equip: equip,
-                        total: Number(String(st.cotizacionMonto || '0').replace(/[^0-9.]/g, '')) || 0
+                        equip: equip
                     });
                 });
             }
@@ -2158,7 +2206,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         return pointsList;
     }, [subTareas, reporteFinal, taskItems, trabajo, maintenanceEquipmentList]);
 
-    // Categorías únicas registradas por el técnico en todos sus puntos
+        // Categorías únicas registradas por el técnico en todos sus puntos
     const registeredTechCategories = useMemo(() => {
         if (categorizedServicePoints.length > 0) {
             const uniqueCats = Array.from(new Set(categorizedServicePoints.map(p => p.categoria)));
@@ -5766,7 +5814,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         </span>
                         {tarea.quoteData?.conceptos && tarea.quoteData.conceptos.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                                {tarea.quoteData.conceptos.map((concept: any, idx: number) => (
+                                {(tarea.quoteData?.conceptos || []).map((concept: any, idx: number) => (
                                     <div key={idx} style={{
                                         background: '#eff6ff',
                                         border: '1px solid #bfdbfe',
@@ -7342,7 +7390,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                         📷 Evidencia Fotográfica ({point.photos.length})
                                                                                     </p>
                                                                                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                                                                        {point.photos.map((pUrl: string, pIdx: number) => {
+                                                                                        {(point.photos || []).map((pUrl: string, pIdx: number) => {
                                                                                             if (!pUrl || typeof pUrl !== 'string') return null;
                                                                                             return (
                                                                                                 <a key={pIdx} href={pUrl} target="_blank" rel="noreferrer" style={{ display: 'block', width: '80px', height: '80px', borderRadius: '12px', overflow: 'hidden', border: '1.5px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
@@ -7363,7 +7411,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     </p>
                                                                                     {Array.isArray(point.conceptos) && point.conceptos.length > 0 ? (
                                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                                            {point.conceptos.map((c: any, cIdx: number) => {
+                                                                                            {(point.conceptos || []).map((c: any, cIdx: number) => {
                                                                                                 if (!c) return null;
                                                                                                 const lineTotal = (Number(c.cantidad) || 1) * (Number(c.precio) || 0);
                                                                                                 return (
@@ -7390,7 +7438,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     </p>
                                                                                     {Array.isArray(point.materiales) && point.materiales.length > 0 ? (
                                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                                            {point.materiales.map((m: any, mIdx: number) => {
+                                                                                            {(point.materiales || []).map((m: any, mIdx: number) => {
                                                                                                 if (!m) return null;
                                                                                                 const lineTotal = (Number(m.cantidad) || 1) * (Number(m.precio) || 0);
                                                                                                 return (
@@ -8846,7 +8894,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     <div style={{ width: '100%', boxSizing: 'border-box' }}>
                                                                                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Materiales y Piezas</label>
                                                                                         <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', width: '100%', boxSizing: 'border-box' }}>
-                                                                                            {item.materials.map((mat, mIdx) => (
+                                                                                            {(item.materials || []).map((mat, mIdx) => (
                                                                                                 <div key={mIdx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px', paddingBottom: '10px', borderBottom: mIdx < item.materials.length - 1 ? '1px solid #e2e8f0' : 'none', width: '100%', boxSizing: 'border-box' }}>
                                                                                                     <input
                                                                                                         placeholder="Material / Refacción"
@@ -9486,7 +9534,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                     )}
 
                                                                                                                     <div style={{ flex: 1, minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                                                                        {pt.conceptos.map((c, cIdx) => (
+                                                                                                                        {(pt.conceptos || []).map((c, cIdx) => (
                                                                                                                             <div key={cIdx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                                                                                                                                 <div>
                                                                                                                                     <span style={{ fontSize: '12.5px', fontWeight: '750', color: '#334155', display: 'block' }}>
@@ -9502,7 +9550,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                             </div>
                                                                                                                         ))}
 
-                                                                                                                        {pt.materiales && pt.materiales.map((m, mIdx) => (
+                                                                                                                        {(pt.materiales || []).map((m, mIdx) => (
                                                                                                                             <div key={mIdx} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
                                                                                                                                 <div>
                                                                                                                                     <span style={{ fontWeight: '750', color: '#92400e' }}>🪛 {m.nombre}</span>
@@ -9524,7 +9572,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                     <div style={{ marginTop: '15px' }}>
                                                                                                         <h4 style={{ color: '#d97706', fontSize: '15px', fontWeight: '800', borderBottom: '1px solid #d97706', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase' }}>1. Conceptos de Servicio</h4>
                                                                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                                                                            {tarea.quoteData.conceptos.map((c: any, idx: number) => (
+                                                                                                            {(tarea.quoteData?.conceptos || []).map((c: any, idx: number) => (
                                                                                                                 <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'linear-gradient(to right, #f8fafc, #ffffff)', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
                                                                                                                     <div style={{ fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
                                                                                                                         {c.descripcion}
@@ -9547,7 +9595,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 <div style={{ marginTop: '15px' }}>
                                                                                                     <h4 style={{ color: '#d97706', fontSize: '15px', fontWeight: '800', borderBottom: '1px solid #d97706', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase' }}>2. Materiales</h4>
                                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                                                                        {tarea.quoteData.materiales.map((m: any, idx: number) => (
+                                                                                                        {(tarea.quoteData?.materiales || []).map((m: any, idx: number) => (
                                                                                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                                                                                                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
                                                                                                                     {m.nombre}
@@ -9604,7 +9652,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                     <div style={{ marginTop: '15px' }}>
                                                                                                         <h4 style={{ color: '#64748b', fontSize: '14px', fontWeight: '800', borderBottom: '1px solid #cbd5e1', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase' }}>Evidencias del Técnico</h4>
                                                                                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
-                                                                                                            {actualReporte.imagenesObservacion.map((img, imgIdx) => (
+                                                                                                            {(Array.isArray(actualReporte.imagenesObservacion) ? actualReporte.imagenesObservacion : []).map((img, imgIdx) => (
                                                                                                                 <div key={imgIdx} style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
                                                                                                                     <img
                                                                                                                         src={img}
@@ -9959,7 +10007,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 <div style={{ marginBottom: '12px' }}>
                                                                                                     <h4 style={{ color: '#d97706', fontSize: '13px', fontWeight: '800', borderBottom: '1px solid #fde68a', paddingBottom: '4px', marginBottom: '8px', textTransform: 'uppercase' }}>1. Conceptos de Servicio</h4>
                                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                                                        {item.quoteData.conceptos.map((c: any, cIdx: number) => (
+                                                                                                        {(item.quoteData?.conceptos || []).map((c: any, cIdx: number) => (
                                                                                                             <div key={cIdx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', background: '#fff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: '#334155' }}>
                                                                                                                 <span>{c.descripcion} (x{c.cantidad || 1})</span>
                                                                                                                 <strong style={{ color: '#0f172a' }}>${(Number(c.cantidad || 1) * Number(c.precio || 0)).toLocaleString('es-MX')}</strong>
@@ -9974,7 +10022,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 <div style={{ marginBottom: '12px' }}>
                                                                                                     <h4 style={{ color: '#d97706', fontSize: '13px', fontWeight: '800', borderBottom: '1px solid #fde68a', paddingBottom: '4px', marginBottom: '8px', textTransform: 'uppercase' }}>2. Materiales</h4>
                                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                                                        {item.quoteData.materiales.map((m: any, mIdx: number) => (
+                                                                                                        {(item.quoteData?.materiales || []).map((m: any, mIdx: number) => (
                                                                                                             <div key={mIdx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', background: '#fff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: '#334155' }}>
                                                                                                                 <span>{m.nombre} (x{m.cantidad || 1})</span>
                                                                                                                 <strong style={{ color: '#0f172a' }}>${(Number(m.cantidad || 1) * Number(m.precio || 0)).toLocaleString('es-MX')}</strong>
@@ -9989,7 +10037,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 <div style={{ marginBottom: '12px' }}>
                                                                                                     <h4 style={{ color: '#64748b', fontSize: '13px', fontWeight: '800', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '8px', textTransform: 'uppercase' }}>Detalle de Refacciones</h4>
                                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                                                        {item.refacciones.map((r: any, rIdx: number) => (
+                                                                                                        {(item.refacciones || []).map((r: any, rIdx: number) => (
                                                                                                             <div key={rIdx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', background: '#fff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', color: '#334155' }}>
                                                                                                                 <span>{r.pieza} (x{r.cantidad || 1})</span>
                                                                                                                 <strong style={{ color: '#0f172a' }}>{r.costo_estimado ? `$${Number(r.costo_estimado).toLocaleString('es-MX')}` : '---'}</strong>
