@@ -1419,7 +1419,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             setActiveTab('Datos');
                         }
                     } else if (mappedJob.tipo === 'Visita') {
-                        if (!mappedJob.visitado) {
+                        if (!mappedJob.visitado || mappedJob.estado === 'Recotización Solicitada' || mappedJob.estado?.toLowerCase().includes('recotiz')) {
                             setActiveTab('Registro');
                         } else if (['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución'].includes(mappedJob.estado) && isTechRole) {
                             setActiveTab('Trabajo');
@@ -5909,7 +5909,12 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                         // Admin general y autonomo-admin NUNCA ven Registro (es exclusivo del técnico)
                                         if (user?.role === 'admin' || isAutonomoAdminUser) return false;
                                         // NO MOSTRAR SI RECHAZADA
-                                        if (trabajo.estado === 'Rechazada') return false;
+                                        if (trabajo.estado === 'Rechazada' || trabajo.estado === 'Cotización Rechazada') return false;
+
+                                        // Si el admin solicitó recotización, el técnico DEBE ver y poder editar su Registro nuevamente
+                                        if (trabajo.estado === 'Recotización Solicitada' || trabajo.estado?.toLowerCase().includes('recotiz')) {
+                                            return true;
+                                        }
 
                                         // Tab Registro solo aparece mientras el técnico NO haya enviado al admin (visitado: false)
                                         if (trabajo?.visitado) return false;
@@ -8747,7 +8752,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             const showMonto = hasCalculatedTotal ? calculatedTotal.toLocaleString('es-MX') : (tarea.cotizacionMonto === 'Por Evaluar' ? 'Sin monto' : tarea.cotizacionMonto);
                                                                             const isMinimized = !!minimizedTechQuotes[tarea.id];
                                                                             const isAcceptedState = tarea.cotizacionEstado === 'Aprobada' || ['Cotización Aceptada', 'Cotización Aprobada', 'Aceptada', 'Finalizado', 'Completado'].includes(trabajo?.estado || '');
-                                                                            const isRejectedState = tarea.cotizacionEstado === 'Rechazada' || ['Cotización Rechazada'].includes(trabajo?.estado || '') || cotizaciones.some(c => c.estado === 'Rechazada');
+                                                                            const isRejectedState = tarea.cotizacionEstado === 'Rechazada' || trabajo?.estado === 'Cotización Rechazada';
+                                                                            const isRecotizState = tarea.cotizacionEstado === 'Recotización Solicitada' || trabajo?.estado === 'Recotización Solicitada' || Boolean(trabajo?.estado?.toLowerCase().includes('recotiz'));
                                                                             const isReactivatedState = tarea.cotizacionEstado === 'Reactivada' || trabajo?.estado === 'Cotización Reactivada';
                                                                             const isAdminGeneral = (user?.role === 'admin' || user?.role === 'autonomo' || user?.role === 'admin-autonomo' || isAutonomoAdmin(user?.role) || user?.role === 'administrador-general' || user?.role === 'gerente-general') && user?.role !== 'tecnico-autonomo' && user?.role !== 'tecnico' && user?.role !== 'cliente';
 
@@ -8899,17 +8905,6 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                     <HiOutlineDocumentText size={14} /> Ver PDF
                                                                                                 </button>
 
-                                                                                                {/* Botón Reactivar Cotización (exclusivo para Administrador General cuando fue rechazada) */}
-                                                                                                {isRejectedState && isAdminGeneral && (
-                                                                                                    <button
-                                                                                                        onClick={handleReactivarCotizacionSugerida}
-                                                                                                        style={{ flex: 1, padding: '10px 14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)' }}
-                                                                                                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                                                                                                        onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-                                                                                                    >
-                                                                                                        <HiOutlineArrowPath size={14} /> Reactivar cotización
-                                                                                                    </button>
-                                                                                                )}
 
                                                                                                 {tarea.quoteData && (user?.role === 'tecnico' || user?.role === 'autonomo') && trabajo?.estado !== 'Cotización Enviada' && cotizaciones.length === 0 && (
                                                                                                     <button
@@ -8925,166 +8920,195 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                     </button>
                                                                                                 )}
 
-                                                                                                {/* Accept/Reject only for autonomo/cliente/admin-autonomo/admin */}
-                                                                                                {(() => {
-                                                                                                    const isAlreadyActioned = ['Cotización Aceptada', 'Cotización Aprobada', 'Aceptada', 'Finalizado', 'Completado', 'Cotización Rechazada'].includes(trabajo?.estado || '');
-                                                                                                    const canActionQuote = !isAlreadyActioned && tarea.cotizacionEstado !== 'Aprobada' && tarea.cotizacionEstado !== 'Rechazada';
-                                                                                                    // El que puede aprobar es: admin general, admin-autonomo (dueño del sistema), autonomo o cliente
-                                                                                                    const canApprove = user?.role === 'autonomo' || user?.role === 'cliente' || user?.role === 'admin-autonomo' || user?.role === 'admin' || user?.role === 'administrador-general' || user?.role === 'gerente-general';
-                                                                                                    return canApprove && canActionQuote;
-                                                                                                })() && (
-                                                                                                        <>
-                                                                                                            <button
-                                                                                                                                                onClick={async () => {
-                                                                                                                    try {
-                                                                                                                        // 📥 IMPORTAR DATOS DE LA COTIZACIÓN DEL TÉCNICO A "ELABORACIÓN DE PROPUESTAS"
+                                                                                                {/* Acciones de Cotización para Administrador / Encargado */}
+                                                                {(() => {
+                                                                    const isAlreadyActioned = ['Cotización Aceptada', 'Cotización Aprobada', 'Aceptada', 'Finalizado', 'Completado'].includes(trabajo?.estado || '');
+                                                                    const canActionQuote = !isAlreadyActioned;
+                                                                    const canApprove = user?.role === 'autonomo' || user?.role === 'cliente' || user?.role === 'admin-autonomo' || user?.role === 'admin' || user?.role === 'administrador-general' || user?.role === 'gerente-general';
+                                                                    if (!canApprove || !canActionQuote) return null;
 
-                                                                                                                        // 📥 IMPORTAR DATOS DE LA COTIZACIÓN DEL TÉCNICO A "ELABORACIÓN DE PROPUESTAS"
-                                                                                                                        const mappedProposals: CotizacionFormItem[] = [];
-                                                                                                                        const qData = tarea.quoteData;
+                                                                    if (isRecotizState) {
+                                                                        return (
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'En Espera' });
+                                                                                        setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Pendiente' as any } : t));
+                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'En Espera' } : prev);
+                                                                                        showAlert('Recotización Cancelada', 'Se ha cancelado la solicitud de recotización y el trabajo volvió a estado En Espera.', 'info');
+                                                                                    } catch (error) {
+                                                                                        showAlert('Error', 'Hubo un problema al cancelar la recotización.', 'error');
+                                                                                    }
+                                                                                }}
+                                                                                style={{ flex: 1, padding: '10px 14px', background: '#fff', color: '#64748b', border: '1.5px solid #cbd5e1', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s', minWidth: '140px' }}
+                                                                                onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                                                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'none'; }}
+                                                                            >
+                                                                                <HiOutlineArrowPath size={14} /> Cancelar Recotización
+                                                                            </button>
+                                                                        );
+                                                                    }
 
-                                                                                                                        if (qData?.itemsQuote && qData.itemsQuote.length > 0) {
-                                                                                                                            qData.itemsQuote.forEach((it: any, idx: number) => {
-                                                                                                                                const cTotal = (it.conceptos || []).reduce((sum: number, c: any) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
-                                                                                                                                const mats = (it.materiales || []).length > 0
-                                                                                                                                    ? it.materiales.map((m: any) => ({ material: m.nombre || m.material || '', piezas: String(m.cantidad || m.piezas || '1'), precio: String(m.precio || '0') }))
-                                                                                                                                    : [{ material: '', piezas: '', precio: '' }];
-                                                                                                                                
-                                                                                                                                let pTitle = it.descripcion || '';
-                                                                                                                                if (!pTitle && it.conceptos && it.conceptos[0]?.descripcion) {
-                                                                                                                                    pTitle = it.conceptos[0].descripcion;
-                                                                                                                                }
-                                                                                                                                if (!pTitle) {
-                                                                                                                                    pTitle = `Punto ${idx + 1}: ${it.tipo || 'Servicio'}`;
-                                                                                                                                }
+                                                                    if (isRejectedState) {
+                                                                        return (
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'En Espera' });
+                                                                                        setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Pendiente' as any } : t));
+                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'En Espera' } : prev);
+                                                                                        showAlert('Rechazo Cancelado', 'Se ha cancelado el rechazo y la cotización volvió a estado En Espera.', 'info');
+                                                                                    } catch (error) {
+                                                                                        showAlert('Error', 'Hubo un problema al cancelar el rechazo.', 'error');
+                                                                                    }
+                                                                                }}
+                                                                                style={{ flex: 1, padding: '10px 14px', background: '#fff', color: '#64748b', border: '1.5px solid #cbd5e1', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s', minWidth: '140px' }}
+                                                                                onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                                                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'none'; }}
+                                                                            >
+                                                                                <HiOutlineArrowPath size={14} /> Cancelar Rechazo
+                                                                            </button>
+                                                                        );
+                                                                    }
 
-                                                                                                                                mappedProposals.push({
-                                                                                                                                    id: `item_${idx + 1}_${Date.now()}`,
-                                                                                                                                    titulo: pTitle,
-                                                                                                                                    manoObra: cTotal > 0 ? String(cTotal) : '0',
-                                                                                                                                    materials: mats,
-                                                                                                                                    notas: idx === 0 ? (tarea.cotizacionNotas || qData?.comentarios || '') : '',
-                                                                                                                                    minimized: false
-                                                                                                                                });
-                                                                                                                            });
-                                                                                                                        } else if (qData?.conceptos && qData.conceptos.length > 0) {
-                                                                                                                            const puntosMap: Record<number, { conceptos: any[], materiales: any[] }> = {};
-                                                                                                                            (qData.conceptos || []).forEach((c: any) => {
-                                                                                                                                const pIdx = c.puntoIndex || 1;
-                                                                                                                                if (!puntosMap[pIdx]) puntosMap[pIdx] = { conceptos: [], materiales: [] };
-                                                                                                                                puntosMap[pIdx].conceptos.push(c);
-                                                                                                                            });
-                                                                                                                            (qData.materiales || []).forEach((m: any) => {
-                                                                                                                                const pIdx = m.puntoIndex || 1;
-                                                                                                                                if (!puntosMap[pIdx]) puntosMap[pIdx] = { conceptos: [], materiales: [] };
-                                                                                                                                puntosMap[pIdx].materiales.push(m);
-                                                                                                                            });
+                                                                    return (
+                                                                        <>
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        const currentEvidence = {
+                                                                                            id: Date.now(),
+                                                                                            version: quoteHistory.length + 1,
+                                                                                            fecha: new Date().toLocaleString('es-MX'),
+                                                                                            tecnicoNombre: tarea.tecnicoNombre || trabajo?.tecnico || 'Técnico',
+                                                                                            quoteData: tarea.quoteData || null,
+                                                                                            refacciones: tarea.refacciones || null,
+                                                                                            comentarios: tarea.cotizacionNotas || '',
+                                                                                            monto: showMonto
+                                                                                        };
+                                                                                        const updatedHistory = [currentEvidence, ...quoteHistory];
+                                                                                        setQuoteHistory(updatedHistory);
+                                                                                        if (trabajo?.id) {
+                                                                                            localStorage.setItem(`quote_history_${trabajo.id}`, JSON.stringify(updatedHistory));
+                                                                                            const HISTORY_MARKER = '|||QUOTE_HISTORY|||';
+                                                                                            const historyPayload = JSON.stringify(updatedHistory);
+                                                                                            const cotizacionActual = cotizaciones.length > 0 ? cotizaciones[0] : null;
+                                                                                            if (cotizacionActual?.id) {
+                                                                                                try {
+                                                                                                    const baseDesc = (cotizacionActual.descripcion || '').split(HISTORY_MARKER)[0].trimEnd();
+                                                                                                    await updateCotizacion(cotizacionActual.id, {
+                                                                                                        descripcion: `${baseDesc}\n${HISTORY_MARKER} ${historyPayload}`,
+                                                                                                        monto: cotizacionActual.monto
+                                                                                                    });
+                                                                                                } catch (saveErr) {
+                                                                                                    console.warn('No se pudo guardar historial en backend', saveErr);
+                                                                                                }
+                                                                                            }
+                                                                                        }
 
-                                                                                                                            const pKeys = Object.keys(puntosMap).map(Number).sort((a, b) => a - b);
-                                                                                                                            pKeys.forEach((pIdx, idx) => {
-                                                                                                                                const grp = puntosMap[pIdx];
-                                                                                                                                const cTotal = grp.conceptos.reduce((sum, c) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
-                                                                                                                                const pTitle = grp.conceptos[0]?.descripcion || `Punto ${pIdx}`;
-                                                                                                                                const mats = grp.materiales.length > 0
-                                                                                                                                    ? grp.materiales.map(m => ({ material: m.nombre || m.material || '', piezas: String(m.cantidad || m.piezas || '1'), precio: String(m.precio || '0') }))
-                                                                                                                                    : [{ material: '', piezas: '', precio: '' }];
-                                                                                                                                
-                                                                                                                                mappedProposals.push({
-                                                                                                                                    id: `item_${idx + 1}_${Date.now()}`,
-                                                                                                                                    titulo: pTitle,
-                                                                                                                                    manoObra: cTotal > 0 ? String(cTotal) : '0',
-                                                                                                                                    materials: mats,
-                                                                                                                                    notas: idx === 0 ? (tarea.cotizacionNotas || qData?.comentarios || '') : '',
-                                                                                                                                    minimized: false
-                                                                                                                                });
-                                                                                                                            });
-                                                                                                                        } else {
-                                                                                                                            const mats = (tarea.refacciones || []).length > 0
-                                                                                                                                ? tarea.refacciones.map((r: any) => ({ material: r.pieza || '', piezas: String(r.cantidad || '1'), precio: String(r.costo_estimado || '0') }))
-                                                                                                                                : [{ material: '', piezas: '', precio: '' }];
-                                                                                                                            mappedProposals.push({
-                                                                                                                                id: `item_1_${Date.now()}`,
-                                                                                                                                titulo: tarea.titulo || trabajo?.titulo || 'Servicio Técnico',
-                                                                                                                                manoObra: String(showMonto || '0').replace(/[^0-9.]/g, ''),
-                                                                                                                                materials: mats,
-                                                                                                                                notas: tarea.cotizacionNotas || '',
-                                                                                                                                minimized: false
-                                                                                                                            });
-                                                                                                                        }
+                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Recotización Solicitada' });
+                                                                                        setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Recotización Solicitada' as any } : t));
+                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Recotización Solicitada' } : prev);
 
-                                                                                                                        if (mappedProposals.length > 0) {
-                                                                                                                            setCotizacionesFormItems(mappedProposals);
-                                                                                                                        }
+                                                                                        // Notificar al técnico
+                                                                                        try {
+                                                                                            let targetTechUserId = (trabajo as any).tecnicoUserId
+                                                                                                || (trabajo as any).trabajador?.user_id
+                                                                                                || tecnicosData.find((t: any) => t.id === trabajo.trabajador_id)?.user_id;
 
-                                                                                                                        // Marcar la cotización del técnico como aceptada por el admin
-                                                                                                                        setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Aprobada' as any } : t));
-                                                                                                                        setShowAddQuoteForm(true);
-                                                                                                                        setActiveTab('Cotización');
+                                                                                            if (!targetTechUserId && trabajo.trabajador_id) {
+                                                                                                try {
+                                                                                                    const allTrabs = await getTrabajadores();
+                                                                                                    const foundTrab = allTrabs.find((t: any) => t.id === trabajo.trabajador_id);
+                                                                                                    if (foundTrab?.user_id) targetTechUserId = foundTrab.user_id;
+                                                                                                } catch (_) { }
+                                                                                            }
 
-                                                                                                                        showAlert('Cotización Importada', `Se importaron las ${mappedProposals.length} propuestas del técnico en "Elaboración de Propuestas". Puedes ajustar los precios antes de enviarla al cliente.`, 'success');
-                                                                                                                    } catch (error) {
-                                                                                                                        showAlert('Error', 'Hubo un problema al importar la cotización.', 'error');
-                                                                                                                    }
-                                                                                                                }}
-                                                                                                                style={{ flex: 1, padding: '10px 14px', background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s' }}
-                                                                                                                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                                                                                                                onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-                                                                                                            >
-                                                                                                                ✓ Aceptar
-                                                                                                            </button>
-                                                                                                            <button
-                                                                                                                onClick={async () => {
-                                                                                                                    try {
-                                                                                                                        const currentEvidence = {
-                                                                                                                            id: Date.now(),
-                                                                                                                            version: quoteHistory.length + 1,
-                                                                                                                            fecha: new Date().toLocaleString('es-MX'),
-                                                                                                                            tecnicoNombre: tarea.tecnicoNombre || trabajo?.tecnico || 'Técnico',
-                                                                                                                            quoteData: tarea.quoteData || null,
-                                                                                                                            refacciones: tarea.refacciones || null,
-                                                                                                                            comentarios: tarea.cotizacionNotas || '',
-                                                                                                                            monto: showMonto
-                                                                                                                        };
-                                                                                                                        const updatedHistory = [currentEvidence, ...quoteHistory];
-                                                                                                                        setQuoteHistory(updatedHistory);
-                                                                                                                        if (trabajo?.id) {
-                                                                                                                            // Guardar en localStorage como caché local
-                                                                                                                            localStorage.setItem(`quote_history_${trabajo.id}`, JSON.stringify(updatedHistory));
-                                                                                                                            // Guardar en backend (en el campo descripcion de la cotización más reciente)
-                                                                                                                            const HISTORY_MARKER = '|||QUOTE_HISTORY|||';
-                                                                                                                            const historyPayload = JSON.stringify(updatedHistory);
-                                                                                                                            const cotizacionActual = cotizaciones.length > 0 ? cotizaciones[0] : null;
-                                                                                                                            if (cotizacionActual?.id) {
-                                                                                                                                try {
-                                                                                                                                    // Limpiar descripcion anterior de marcadores de historial y agregar el nuevo
-                                                                                                                                    const baseDesc = (cotizacionActual.descripcion || '').split(HISTORY_MARKER)[0].trimEnd();
-                                                                                                                                    await updateCotizacion(cotizacionActual.id, {
-                                                                                                                                        descripcion: `${baseDesc}\n${HISTORY_MARKER} ${historyPayload}`,
-                                                                                                                                        monto: cotizacionActual.monto
-                                                                                                                                    });
-                                                                                                                                } catch (saveErr) {
-                                                                                                                                    console.warn('No se pudo guardar historial en backend, solo en localStorage', saveErr);
-                                                                                                                                }
-                                                                                                                            }
-                                                                                                                        }
+                                                                                            if (targetTechUserId) {
+                                                                                                await createNotificacion({
+                                                                                                    user_id: targetTechUserId,
+                                                                                                    titulo: '🔁 Recotización Asignada',
+                                                                                                    mensaje: `El administrador ha solicitado una recotización para "${trabajo.titulo || trabajo.sucursal || 'tu visita'}". Por favor ajusta los precios en tu registro.`,
+                                                                                                    enlace: `/tecnico/trabajo-detalle/${trabajo.id}?tab=Registro`
+                                                                                                });
+                                                                                            } else {
+                                                                                                await createNotificacionByRole({
+                                                                                                    role: 'tecnico',
+                                                                                                    titulo: '🔁 Recotización Asignada',
+                                                                                                    mensaje: `El administrador ha solicitado una recotización para "${trabajo.titulo || trabajo.sucursal || 'el servicio'}". Por favor ajusta los precios en tu registro.`,
+                                                                                                    enlace: `/tecnico/trabajo-detalle/${trabajo.id}?tab=Registro`
+                                                                                                });
+                                                                                            }
+                                                                                        } catch (notiErr) {
+                                                                                            console.error("Error enviando notificación de recotización al técnico:", notiErr);
+                                                                                        }
 
-                                                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Recotización Solicitada' });
-                                                                                                                        setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Rechazada' as any } : t));
-                                                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Recotización Solicitada' } : prev);
-                                                                                                                        showAlert('Re-Cotización Solicitada', `Has devuelto la cotización a ${tarea.tecnicoNombre || 'el técnico'} para que la modifique.`, 'warning');
-                                                                                                                    } catch (error) {
-                                                                                                                        showAlert('Error', 'Hubo un problema al actualizar el estado.', 'error');
-                                                                                                                    }
-                                                                                                                }}
-                                                                                                                style={{ padding: '10px 14px', background: '#fff', color: '#f59e0b', border: '1.5px solid #fcd34d', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s' }}
-                                                                                                                onMouseEnter={e => { e.currentTarget.style.background = '#fef3c7'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                                                                                                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'none'; }}
-                                                                                                            >
-                                                                                                                🔁 Re Cotizar
-                                                                                                            </button>
-                                                                                                        </>
-                                                                                                    )}
-                                                                                            </div>
+                                                                                        showAlert('Re-Cotización Solicitada', `Has solicitado una recotización a ${tarea.tecnicoNombre || 'el técnico'} para que modifique sus precios.`, 'warning');
+                                                                                    } catch (error) {
+                                                                                        showAlert('Error', 'Hubo un problema al solicitar la recotización.', 'error');
+                                                                                    }
+                                                                                }}
+                                                                                style={{ flex: 1, padding: '10px 14px', background: '#fff', color: '#f59e0b', border: '1.5px solid #fcd34d', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s', minWidth: '100px' }}
+                                                                                onMouseEnter={e => { e.currentTarget.style.background = '#fef3c7'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                                                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'none'; }}
+                                                                            >
+                                                                                🔁 Re Cotizar
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    try {
+                                                                                        await updateEstadoTrabajo(trabajo!.id, { estado: 'Cotización Rechazada' });
+                                                                                        setSubTareas(prev => prev.map(t => t.id === tarea.id ? { ...t, cotizacionEstado: 'Rechazada' as any } : t));
+                                                                                        setTrabajo(prev => prev ? { ...prev, estado: 'Cotización Rechazada' } : prev);
+
+                                                                                        // Notificar al técnico de la cancelación/rechazo
+                                                                                        try {
+                                                                                            let targetTechUserId = (trabajo as any).tecnicoUserId
+                                                                                                || (trabajo as any).trabajador?.user_id
+                                                                                                || tecnicosData.find((t: any) => t.id === trabajo.trabajador_id)?.user_id;
+
+                                                                                            if (!targetTechUserId && trabajo.trabajador_id) {
+                                                                                                try {
+                                                                                                    const allTrabs = await getTrabajadores();
+                                                                                                    const foundTrab = allTrabs.find((t: any) => t.id === trabajo.trabajador_id);
+                                                                                                    if (foundTrab?.user_id) targetTechUserId = foundTrab.user_id;
+                                                                                                } catch (_) { }
+                                                                                            }
+
+                                                                                            if (targetTechUserId) {
+                                                                                                await createNotificacion({
+                                                                                                    user_id: targetTechUserId,
+                                                                                                    titulo: '❌ Cotización / Servicio Cancelado',
+                                                                                                    mensaje: `Tu cotización para el servicio "${trabajo.titulo || trabajo.sucursal || 'Servicio'}" ha sido rechazada/cancelada por el administrador.`,
+                                                                                                    enlace: `/tecnico/trabajo-detalle/${trabajo.id}`
+                                                                                                });
+                                                                                            } else {
+                                                                                                await createNotificacionByRole({
+                                                                                                    role: 'tecnico',
+                                                                                                    titulo: '❌ Cotización / Servicio Cancelado',
+                                                                                                    mensaje: `La cotización para el servicio "${trabajo.titulo || trabajo.sucursal || 'Servicio'}" ha sido rechazada/cancelada por el administrador.`,
+                                                                                                    enlace: `/tecnico/trabajo-detalle/${trabajo.id}`
+                                                                                                });
+                                                                                            }
+                                                                                        } catch (notiErr) {
+                                                                                            console.error("Error enviando notificación de rechazo al técnico:", notiErr);
+                                                                                        }
+
+                                                                                        showAlert('Cotización Rechazada', `Has rechazado la cotización. El técnico ha sido notificado del cierre o cancelación.`, 'error');
+                                                                                    } catch (error) {
+                                                                                        showAlert('Error', 'Hubo un problema al rechazar la cotización.', 'error');
+                                                                                    }
+                                                                                }}
+                                                                                style={{ flex: 1, padding: '10px 14px', background: '#fff', color: '#ef4444', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s', minWidth: '100px' }}
+                                                                                onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                                                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'none'; }}
+                                                                            >
+                                                                                ❌ Rechazar
+                                                                            </button>
+                                                                        </>
+                                                                    );
+                                                                })()}
+</div>
 
                                                                                             {/* Status badge if already accepted/rejected */}
                                                                                             {(() => {

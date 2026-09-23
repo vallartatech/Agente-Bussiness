@@ -59,7 +59,10 @@ const getStatusText = (job: Trabajo, userRole: string): string => {
     if (status === 'rechazado por técnico' || status === 'rechazado por tecnico')
         return userRole === 'tecnico' ? 'RECHAZASTE ESTA ASIGNACIÓN' : 'RECHAZADO POR TÉCNICO';
     if (job.tipo === 'SOS') return '¡ALERTA SOS!';
-    if (status.includes('recotiz')) return 'RECOTIZACIÓN SOLICITADA';
+    if (status.includes('recotiz'))
+        return (userRole === 'tecnico' || userRole === 'tecnico-normal' || userRole === 'tecnico-autonomo' || userRole === 'autonomo')
+            ? 'RECOTIZACIÓN ASIGNADA'
+            : 'RECOTIZACIÓN SOLICITADA';
     if (status.includes('cotizaci')) {
         if (status.includes('aceptada') || status.includes('aprobada')) return 'COTIZACIÓN ACEPTADA';
         if (status.includes('rechazada')) return 'COTIZACIÓN RECHAZADA';

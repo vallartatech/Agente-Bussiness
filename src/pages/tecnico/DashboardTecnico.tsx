@@ -184,18 +184,26 @@ const DashboardTecnico: React.FC = () => {
     
     const isSOSJob = (t: any) => t.tipo === 'SOS' || t.prioridad === 'Emergencia' || (t.titulo || '').includes('SOS') || t.isEmergency;
 
-    // 2. Asignaciones de visitas (Visitas pendientes de evaluación del técnico en campo, antes de enviar al admin)
+    // 2. Asignaciones de visitas (Visitas pendientes de evaluación del técnico en campo, antes de enviar al admin, o recotizaciones solicitadas)
     const colVisita = trabajos.filter(t => 
-        ['En Proceso', 'Asignado', 'Aceptada', 'En Espera'].includes(t.estado) && 
-        (t.tipo === 'Visita' || isSOSJob(t)) && 
-        !t.visitado &&
-        !['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución', 'Cotización Enviada', 'Cotización Rechazada'].includes(t.estado)
+        (
+            ['En Proceso', 'Asignado', 'Aceptada', 'En Espera'].includes(t.estado) && 
+            (t.tipo === 'Visita' || isSOSJob(t)) && 
+            !t.visitado &&
+            !['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución', 'Cotización Enviada', 'Cotización Rechazada'].includes(t.estado)
+        ) ||
+        t.estado === 'Recotización Solicitada' ||
+        (typeof t.estado === 'string' && t.estado.toLowerCase().includes('recotiz'))
     );
     
     // 3. Asignaciones de trabajo (Cotización Aceptada por cliente, En Ejecución, Trabajos directos asignados)
     const colProceso = trabajos.filter(t => 
-        ['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución'].includes(t.estado) ||
-        (t.tipo !== 'Visita' && !isSOSJob(t) && ['En Proceso', 'Asignado', 'Aceptada', 'En Espera', 'Cotización Enviada', 'Cotización Rechazada'].includes(t.estado))
+        (
+            ['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución'].includes(t.estado) ||
+            (t.tipo !== 'Visita' && !isSOSJob(t) && ['En Proceso', 'Asignado', 'Aceptada', 'En Espera', 'Cotización Enviada', 'Cotización Rechazada'].includes(t.estado))
+        ) &&
+        t.estado !== 'Recotización Solicitada' &&
+        !(typeof t.estado === 'string' && t.estado.toLowerCase().includes('recotiz'))
     );
     
     // 4. Trabajos finalizados
@@ -222,6 +230,7 @@ const DashboardTecnico: React.FC = () => {
         const isSeen = isCardSeen(userRole, t.id, t.estado);
         const accent = COL_COLORS[colKey];
         const isGroup = !!(t as any).isGroupHeader && (t as any).jobsInGroup?.length > 1;
+        const isRecotiz = t.estado === 'Recotización Solicitada' || (typeof t.estado === 'string' && t.estado.toLowerCase().includes('recotiz'));
 
         const handleCardClick = () => {
             markCardAsSeen(userRole, t.id, t.estado);
@@ -270,6 +279,27 @@ const DashboardTecnico: React.FC = () => {
                         {t.prioridad}
                     </span>
                 </div>
+
+                {isRecotiz && (
+                    <div style={{
+                        background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
+                        border: '1.5px solid #fdba74',
+                        borderRadius: '8px',
+                        padding: '6px 10px',
+                        marginTop: '8px',
+                        marginBottom: '4px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        color: '#c2410c',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(234, 88, 12, 0.1)'
+                    }}>
+                        <span style={{ fontSize: '13px' }}>🔁</span>
+                        <span>RECOTIZACIÓN ASIGNADA</span>
+                    </div>
+                )}
                 
                 <h4 className={styles.cardTitle}>{t.titulo}</h4>
                 
