@@ -129,14 +129,36 @@ export const getMergedIntervenciones = (equipo: any, solicitudes: any[] = [], tr
 
     // 1. Agregar solicitudes de mantenimiento
     matchedSolicitudes.forEach(sol => {
-        const linkedJobId = String(sol.actualTrabajoId || sol.reparacion_trabajo_id || sol.visita_trabajo_id || sol.reparacion_trabajo?.id || sol.visita_trabajo?.id || '');
+        const foundReparacion = trabajos.find(t => String(t.id) === String(sol.reparacion_trabajo_id));
+        const foundVisita = trabajos.find(t => String(t.id) === String(sol.visita_trabajo_id));
+
+        const repTrab = sol.reparacion_trabajo || foundReparacion;
+        const visTrab = sol.visita_trabajo || foundVisita;
+
+        const linkedJobId = String(
+            sol.actualTrabajoId ||
+            (repTrab && (repTrab.reporte || repTrab.solucion) ? repTrab.id : '') ||
+            (visTrab && (visTrab.reporte || visTrab.solucion) ? visTrab.id : '') ||
+            sol.reparacion_trabajo_id ||
+            sol.visita_trabajo_id ||
+            repTrab?.id ||
+            visTrab?.id ||
+            ''
+        );
+
         if (linkedJobId) {
             usedJobIds.add(linkedJobId);
             usedJobIds.add(`m-${linkedJobId}`);
         }
         usedJobIds.add(String(sol.id));
         usedJobIds.add(`m-${sol.id}`);
-        merged.push(sol);
+
+        merged.push({
+            ...sol,
+            reparacion_trabajo: repTrab,
+            visita_trabajo: visTrab,
+            actualTrabajoId: linkedJobId ? Number(linkedJobId) : sol.actualTrabajoId
+        });
     });
 
     // 2. Agregar trabajos vinculados no duplicados

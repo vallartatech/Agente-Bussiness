@@ -271,7 +271,14 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                                                                         onClick={(e) => {
                                                                                             e.preventDefault();
                                                                                             e.stopPropagation();
-                                                                                            const targetId = rep.id || req.actualTrabajoId || req.original_id || req.id;
+                                                                                            const targetId = rep.id 
+                                                                                                || req.reparacion_trabajo?.id 
+                                                                                                || req.reparacion_trabajo_id 
+                                                                                                || req.visita_trabajo?.id 
+                                                                                                || req.visita_trabajo_id 
+                                                                                                || req.actualTrabajoId 
+                                                                                                || req.original_id
+                                                                                                || (req.isJob ? req.id : null);
                                                                                             if (targetId) {
                                                                                                 onViewReport?.(Number(String(targetId).replace('m-', '').replace('gen-', '')));
                                                                                             }
@@ -310,7 +317,14 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                                                                 onClick={(e) => {
                                                                                     e.preventDefault();
                                                                                     e.stopPropagation();
-                                                                                    const rawTargetId = req.actualTrabajoId || req.original_id || req.id || (finalReports[finalReports.length - 1]?.id);
+                                                                                    const rawTargetId = (finalReports.length > 0 && finalReports[finalReports.length - 1]?.id)
+                                                                                        || req.reparacion_trabajo?.id
+                                                                                        || req.reparacion_trabajo_id
+                                                                                        || req.visita_trabajo?.id
+                                                                                        || req.visita_trabajo_id
+                                                                                        || req.actualTrabajoId
+                                                                                        || req.original_id
+                                                                                        || (req.isJob || (!req.levantamiento_equipo_id && !req.reparacion_trabajo_id && !req.visita_trabajo_id) ? req.id : null);
                                                                                     if (rawTargetId) {
                                                                                         const targetId = Number(String(rawTargetId).replace('m-', '').replace('gen-', ''));
                                                                                         onViewReport(targetId);
