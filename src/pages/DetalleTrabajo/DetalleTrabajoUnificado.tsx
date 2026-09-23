@@ -1948,6 +1948,143 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     const [reassignReason, setReassignReason] = useState("");
     const [isSubmittingReassign, setIsSubmittingReassign] = useState(false);
 
+    // Recopilación unificada de todas las fotos de reporte / levantamiento del técnico
+    const allTechReportPhotos = useMemo(() => {
+        const photos: { url: string; label: string }[] = [];
+        const seen = new Set<string>();
+
+        const addPhoto = (url: string | undefined | null, label: string) => {
+            if (!url || typeof url !== 'string' || !url.trim() || url === '—' || url === 'null' || url === 'undefined') return;
+            if (!seen.has(url)) {
+                seen.add(url);
+                photos.push({ url, label });
+            }
+        };
+
+        const actualRep = reporteFinal || (() => {
+            const fallbackRaw = localStorage.getItem(`report_data_${trabajo?.id}`);
+            const tempRaw = localStorage.getItem(`report_data_temporal_${trabajo?.id}`);
+            try {
+                return fallbackRaw ? JSON.parse(fallbackRaw) : (tempRaw ? JSON.parse(tempRaw) : null);
+            } catch (e) {
+                return null;
+            }
+        })();
+
+        if (actualRep) {
+            if (actualRep.imagenes?.antes) addPhoto(actualRep.imagenes.antes, 'Antes');
+            if (actualRep.imagenes?.durante) addPhoto(actualRep.imagenes.durante, 'Durante');
+            if (actualRep.imagenes?.despues) addPhoto(actualRep.imagenes.despues, 'Después');
+            if (Array.isArray(actualRep.imagenesObservacion)) {
+                actualRep.imagenesObservacion.forEach((img: string, idx: number) => addPhoto(img, `Evidencia ${idx + 1}`));
+            } else if (actualRep.imagenObservacion) {
+                addPhoto(actualRep.imagenObservacion, 'Observación');
+            }
+            if (Array.isArray(actualRep.taskItems)) {
+                actualRep.taskItems.forEach((tIt: any, idx: number) => {
+                    if (tIt.foto) addPhoto(tIt.foto, `Punto ${idx + 1}`);
+                    if (Array.isArray(tIt.photos)) {
+                        tIt.photos.forEach((p: string, pIdx: number) => addPhoto(p, `Punto ${idx + 1} (${pIdx + 1})`));
+                    }
+                });
+            }
+        }
+
+        if (reporteFinal) {
+            if (reporteFinal.imagenes?.antes) addPhoto(reporteFinal.imagenes.antes, 'Antes');
+            if (reporteFinal.imagenes?.durante) addPhoto(reporteFinal.imagenes.durante, 'Durante');
+            if (reporteFinal.imagenes?.despues) addPhoto(reporteFinal.imagenes.despues, 'Después');
+            if (Array.isArray(reporteFinal.imagenesObservacion)) {
+                reporteFinal.imagenesObservacion.forEach((img: string, idx: number) => addPhoto(img, `Evidencia ${idx + 1}`));
+            }
+        }
+
+        if (Array.isArray(subTareas)) {
+            subTareas.forEach((st: any, idx: number) => {
+                if (Array.isArray(st.photos)) {
+                    st.photos.forEach((p: string, pIdx: number) => addPhoto(p, `${st.titulo || `Punto ${idx + 1}`} (${pIdx + 1})`));
+                }
+                if (st.foto) addPhoto(st.foto, st.titulo || `Punto ${idx + 1}`);
+            });
+        }
+
+        if (Array.isArray(taskItems)) {
+            taskItems.forEach((tIt: any, idx: number) => {
+                if (tIt.foto) addPhoto(tIt.foto, `Punto ${idx + 1}`);
+            });
+        }
+
+        if (trabajo?.foto_url) {
+            addPhoto(trabajo.foto_url, 'Foto de Solicitud');
+        }
+
+        return photos;
+    }, [reporteFinal, trabajo, subTareas, taskItems]);
+
+    // Resumen de Contexto del Servicio & Equipo / Especialidad
+    const serviceContextInfo = useMemo(() => {
+        if (!trabajo) return null;
+
+        const rawTitle = trabajo.titulo || '';
+        const rawDesc = (trabajo as any).descripcion_problema || trabajo.descripcion || '';
+        
+        // Detectar si es mantenimiento o tiene equipo
+        const isMaintenance = Boolean(
+            rawTitle.toLowerCase().includes('mantenimiento') ||
+            trabajo.tipo === 'Visita' ||
+            (maintenanceEquipmentList && maintenanceEquipmentList.length > 0) ||
+            (trabajo as any).levantamiento_equipo ||
+            (trabajo as any).levantamientoEquipo ||
+            subTareas.some(t => t.serviceData?.marca || t.titulo?.toLowerCase().includes('mantenimiento'))
+        );
+
+        // Equipo principal
+        const equip = (maintenanceEquipmentList && maintenanceEquipmentList.length > 0 ? maintenanceEquipmentList[0] : null) || 
+            ((trabajo as any).levantamiento_equipo ? {
+                nombre: (trabajo as any).levantamiento_equipo.nombre || (trabajo as any).levantamiento_equipo.name || 'Equipo',
+                marca: (trabajo as any).levantamiento_equipo.marca || '',
+                modelo: (trabajo as any).levantamiento_equipo.modelo || '',
+                area: (trabajo as any).levantamiento_equipo.area || ''
+            } : null) ||
+            (subTareas.find(t => t.serviceData?.marca) ? {
+                nombre: subTareas.find(t => t.serviceData?.marca)?.titulo || 'Equipo',
+                marca: subTareas.find(t => t.serviceData?.marca)?.serviceData?.marca || '',
+                modelo: subTareas.find(t => t.serviceData?.marca)?.serviceData?.modelo || '',
+                area: ''
+            } : null);
+
+        // Especialidad / Categoría
+        let specialty = 'Servicio General';
+        const lowerTitle = rawTitle.toLowerCase();
+        if (lowerTitle.includes('electric') || lowerTitle.includes('luz') || lowerTitle.includes('cable') || lowerTitle.includes('corto')) {
+            specialty = '⚡ Electricidad';
+        } else if (lowerTitle.includes('plomer') || lowerTitle.includes('fuga') || lowerTitle.includes('tuber') || lowerTitle.includes('agua') || lowerTitle.includes('bomba')) {
+            specialty = '🚰 Plomería';
+        } else if (lowerTitle.includes('aire') || lowerTitle.includes('clima') || lowerTitle.includes('minisplit') || lowerTitle.includes('hvac') || lowerTitle.includes('enfriador')) {
+            specialty = '❄️ Climas / Refrigeración';
+        } else if (lowerTitle.includes('obra') || lowerTitle.includes('pintura') || lowerTitle.includes('tabla') || lowerTitle.includes('piso') || lowerTitle.includes('muro')) {
+            specialty = '🧱 Obra Civil / Acabados';
+        } else if (lowerTitle.includes('gas')) {
+            specialty = '🔥 Gas / Calentadores';
+        } else if (isMaintenance) {
+            specialty = '🛠️ Mantenimiento Preventivo / Correctivo';
+        } else if (trabajo.tipo) {
+            specialty = `🔧 ${trabajo.tipo}`;
+        }
+
+        return {
+            isMaintenance,
+            specialty,
+            equip,
+            equipments: maintenanceEquipmentList,
+            titulo: rawTitle,
+            problema: rawDesc,
+            sucursal: (trabajo as any).negocio?.nombre || trabajo.sucursal || trabajo.ubicacion || 'Sucursal',
+            tecnico: trabajo.tecnico || subTareas[0]?.tecnicoNombre || 'Técnico Asignado'
+        };
+    }, [trabajo, maintenanceEquipmentList, subTareas]);
+
+
     const handleReassignSubmit = async () => {
         if (!reassignReason.trim()) {
             showAlert("Atención", "Por favor ingresa el motivo del cambio de técnico.", "warning");
@@ -5894,8 +6031,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                         return tabName === 'Datos' || tabName === 'Historial' || tabName === 'Trabajo';
                                     }
                                     if (tabName === 'Cotización') {
+                                        // La cotización del administrador es SOLO para el cliente y admin. El técnico NUNCA ve la pestaña de cotizaciones del admin.
                                         if (isTechRole || user?.role === 'tecnico' || user?.role === 'tecnico-normal' || user?.role === 'tecnico-autonomo') {
-                                            return cotizaciones.length > 0 || Boolean(trabajo?.visitado) || ['Cotización Enviada', 'Cotización Rechazada', 'Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución', 'Finalizado'].includes(trabajo.estado);
+                                            return false;
                                         }
                                         if (user?.role === 'cliente') {
                                             return cotizaciones.length > 0 || ['Cotización Enviada', 'Cotización Aceptada', 'Cotización Aprobada'].includes(trabajo.estado);
@@ -8266,6 +8404,136 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                 </div>
                                                             </div>
 
+                                                            {/* TARJETA DE CONTEXTO DEL SERVICIO & EQUIPO / PROBLEMA */}
+                                                            {serviceContextInfo && (
+                                                                <div style={{
+                                                                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                                                                    border: '1.5px solid #cbd5e1',
+                                                                    borderRadius: '16px',
+                                                                    padding: '16px 18px',
+                                                                    marginBottom: '20px',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: '12px',
+                                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                                                                }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                            <span style={{ fontSize: '18px' }}>📌</span>
+                                                                            <span style={{ fontSize: '14.5px', fontWeight: '850', color: '#0f172a' }}>
+                                                                                {serviceContextInfo.titulo || 'Servicio a Cotizar'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                            <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '11px', fontWeight: '800', padding: '3px 10px', borderRadius: '20px', border: '1px solid #bae6fd' }}>
+                                                                                {serviceContextInfo.specialty}
+                                                                            </span>
+                                                                            <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '11px', fontWeight: '800', padding: '3px 10px', borderRadius: '20px', border: '1px solid #fde68a' }}>
+                                                                                🏢 {serviceContextInfo.sucursal}
+                                                                            </span>
+                                                                            <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '11px', fontWeight: '750', padding: '3px 10px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                                                                                👷 Técnico: {serviceContextInfo.tecnico}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* DATOS DEL EQUIPO EN CUESTIÓN (SI ES MANTENIMIENTO O TIENE EQUIPO) */}
+                                                                    {serviceContextInfo.equip && (
+                                                                        <div style={{ background: '#ffffff', border: '1.5px solid #bfdbfe', borderRadius: '12px', padding: '12px 14px' }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                                                                <span style={{ fontSize: '15px' }}>🖥️</span>
+                                                                                <span style={{ fontSize: '11px', fontWeight: '850', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                                    Datos del Equipo en Cuestión:
+                                                                                </span>
+                                                                            </div>
+                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', fontSize: '12.5px' }}>
+                                                                                <div>
+                                                                                    <span style={{ color: '#64748b', fontSize: '10.5px', display: 'block', fontWeight: '800' }}>EQUIPO / TIPO</span>
+                                                                                    <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.nombre || 'Equipo Principal'}</strong>
+                                                                                </div>
+                                                                                {serviceContextInfo.equip.marca && (
+                                                                                    <div>
+                                                                                        <span style={{ color: '#64748b', fontSize: '10.5px', display: 'block', fontWeight: '800' }}>MARCA</span>
+                                                                                        <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.marca}</strong>
+                                                                                    </div>
+                                                                                )}
+                                                                                {serviceContextInfo.equip.modelo && (
+                                                                                    <div>
+                                                                                        <span style={{ color: '#64748b', fontSize: '10.5px', display: 'block', fontWeight: '800' }}>MODELO</span>
+                                                                                        <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.modelo}</strong>
+                                                                                    </div>
+                                                                                )}
+                                                                                {serviceContextInfo.equip.area && (
+                                                                                    <div>
+                                                                                        <span style={{ color: '#64748b', fontSize: '10.5px', display: 'block', fontWeight: '800' }}>ÁREA / UBICACIÓN</span>
+                                                                                        <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.area}</strong>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* PROBLEMA REPORTADO O TRABAJO SOLICITADO */}
+                                                                    {serviceContextInfo.problema && (
+                                                                        <div style={{ background: '#ffffff', border: '1.5px solid #fed7aa', borderRadius: '12px', padding: '12px 14px' }}>
+                                                                            <span style={{ fontSize: '11px', fontWeight: '850', color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '4px' }}>
+                                                                                📝 Trabajo Solicitado / Problema Reportado:
+                                                                            </span>
+                                                                            <span style={{ fontSize: '13px', color: '#334155', fontWeight: '600', lineHeight: '1.4' }}>
+                                                                                {serviceContextInfo.problema}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* FOTOS DEL REPORTE TOMADAS POR EL TÉCNICO */}
+                                                                    {allTechReportPhotos.length > 0 && (
+                                                                        <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px' }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                    <span style={{ fontSize: '15px' }}>📷</span>
+                                                                                    <span style={{ fontSize: '11px', fontWeight: '850', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                                        Fotos del Reporte / Levantamiento ({allTechReportPhotos.length}):
+                                                                                    </span>
+                                                                                </div>
+                                                                                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Click para ampliar foto</span>
+                                                                            </div>
+                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '10px' }}>
+                                                                                {allTechReportPhotos.map((photo, pIdx) => (
+                                                                                    <div
+                                                                                        key={pIdx}
+                                                                                        onClick={() => setSelectedZoomImage(photo.url)}
+                                                                                        style={{
+                                                                                            cursor: 'pointer',
+                                                                                            display: 'flex',
+                                                                                            flexDirection: 'column',
+                                                                                            alignItems: 'center',
+                                                                                            gap: '4px',
+                                                                                            background: '#f8fafc',
+                                                                                            padding: '4px',
+                                                                                            borderRadius: '10px',
+                                                                                            border: '1px solid #e2e8f0',
+                                                                                            transition: 'transform 0.15s ease'
+                                                                                        }}
+                                                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                                                        onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                                                                                    >
+                                                                                        <img
+                                                                                            src={photo.url}
+                                                                                            alt={photo.label}
+                                                                                            style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '8px' }}
+                                                                                        />
+                                                                                        <span style={{ fontSize: '10px', fontWeight: '750', color: '#64748b', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                                            {photo.label}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+
                                                             <div className={styles.cardTransparentScroll} style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '20px', maxHeight: '520px', width: '100%', boxSizing: 'border-box' }}>
                                                                 {cotizacionesFormItems.map((item, idx) => {
                                                                     const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
@@ -8661,47 +8929,87 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                             </div>
                                                         </div>
                                                     )}
-                                                    {/* Card 2: Evidencia Fotográfica */}
-                                                    {actualReporte && (actualReporte.imagenes?.antes || actualReporte.imagenes?.durante || actualReporte.imagenes?.despues || actualReporte.imagenObservacion || (actualReporte.imagenesObservacion && actualReporte.imagenesObservacion.length > 0)) && (
-                                                        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 24px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                                                                <span style={{ fontSize: '18px' }}>📷</span>
-                                                                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>Evidencia Fotográfica</h3>
+                                                    {/* Card 1.5: Datos del Trabajo y Equipo en el Drawer */}
+                                                    {serviceContextInfo && (
+                                                        <div style={{ background: '#fff', borderRadius: '20px', padding: '18px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1.5px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                                                <span style={{ fontSize: '13.5px', fontWeight: '850', color: '#1e293b' }}>
+                                                                    📌 {serviceContextInfo.titulo || 'Servicio'}
+                                                                </span>
+                                                                <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '10.5px', fontWeight: '800', padding: '2px 8px', borderRadius: '12px' }}>
+                                                                    {serviceContextInfo.specialty}
+                                                                </span>
                                                             </div>
-                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px' }}>
-                                                                {actualReporte.imagenes?.antes && (
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                                                        <img src={actualReporte.imagenes.antes} alt="Antes" onClick={() => setSelectedZoomImage(actualReporte.imagenes.antes)} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '12px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'} />
-                                                                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748b' }}>Antes</span>
+
+                                                            {serviceContextInfo.equip && (
+                                                                <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px' }}>
+                                                                    <span style={{ fontSize: '10.5px', fontWeight: '850', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                                                                        🖥️ Datos del Equipo (Mantenimiento):
+                                                                    </span>
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px' }}>
+                                                                        <div><strong style={{ color: '#15803d' }}>Equipo:</strong> {serviceContextInfo.equip.nombre || 'Equipo'}</div>
+                                                                        {serviceContextInfo.equip.marca && <div><strong style={{ color: '#15803d' }}>Marca:</strong> {serviceContextInfo.equip.marca}</div>}
+                                                                        {serviceContextInfo.equip.modelo && <div><strong style={{ color: '#15803d' }}>Modelo:</strong> {serviceContextInfo.equip.modelo}</div>}
+                                                                        {serviceContextInfo.equip.area && <div><strong style={{ color: '#15803d' }}>Área:</strong> {serviceContextInfo.equip.area}</div>}
                                                                     </div>
-                                                                )}
-                                                                {actualReporte.imagenes?.durante && (
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                                                        <img src={actualReporte.imagenes.durante} alt="Durante" onClick={() => setSelectedZoomImage(actualReporte.imagenes.durante)} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '12px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'} />
-                                                                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748b' }}>Durante</span>
+                                                                </div>
+                                                            )}
+
+                                                            {serviceContextInfo.problema && !serviceContextInfo.equip && (
+                                                                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 12px' }}>
+                                                                    <span style={{ fontSize: '10.5px', fontWeight: '850', color: '#c2410c', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
+                                                                        📝 Problema Reportado:
+                                                                    </span>
+                                                                    <p style={{ margin: 0, fontSize: '12.5px', color: '#475569', lineHeight: '1.4' }}>
+                                                                        {serviceContextInfo.problema}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Card 2: Evidencia Fotográfica del Técnico */}
+                                                    {allTechReportPhotos.length > 0 && (
+                                                        <div style={{ background: '#fff', borderRadius: '20px', padding: '18px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1.5px solid #e2e8f0' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <span style={{ fontSize: '18px' }}>📷</span>
+                                                                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
+                                                                        Fotos del Reporte del Técnico ({allTechReportPhotos.length})
+                                                                    </h3>
+                                                                </div>
+                                                                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Click para ampliar</span>
+                                                            </div>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))', gap: '10px' }}>
+                                                                {allTechReportPhotos.map((photo, pIdx) => (
+                                                                    <div
+                                                                        key={pIdx}
+                                                                        onClick={() => setSelectedZoomImage(photo.url)}
+                                                                        style={{
+                                                                            cursor: 'pointer',
+                                                                            display: 'flex',
+                                                                            flexDirection: 'column',
+                                                                            alignItems: 'center',
+                                                                            gap: '4px',
+                                                                            background: '#f8fafc',
+                                                                            padding: '4px',
+                                                                            borderRadius: '10px',
+                                                                            border: '1px solid #e2e8f0',
+                                                                            transition: 'transform 0.15s ease'
+                                                                        }}
+                                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                                        onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                                                                    >
+                                                                        <img
+                                                                            src={photo.url}
+                                                                            alt={photo.label}
+                                                                            style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '8px' }}
+                                                                        />
+                                                                        <span style={{ fontSize: '10px', fontWeight: '750', color: '#64748b', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                            {photo.label}
+                                                                        </span>
                                                                     </div>
-                                                                )}
-                                                                {actualReporte.imagenes?.despues && (
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                                                        <img src={actualReporte.imagenes.despues} alt="Después" onClick={() => setSelectedZoomImage(actualReporte.imagenes.despues)} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '12px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'} />
-                                                                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748b' }}>Después</span>
-                                                                    </div>
-                                                                )}
-                                                                {actualReporte.imagenesObservacion && actualReporte.imagenesObservacion.length > 0 ? (
-                                                                    actualReporte.imagenesObservacion.map((img: string, idx: number) => (
-                                                                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                                                            <img src={img} alt={`Extra ${idx + 1}`} onClick={() => setSelectedZoomImage(img)} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '12px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'} />
-                                                                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748b' }}>Extra {idx + 1}</span>
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    actualReporte.imagenObservacion && (
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                                                            <img src={actualReporte.imagenObservacion} alt="Extra" onClick={() => setSelectedZoomImage(actualReporte.imagenObservacion)} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '12px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'} />
-                                                                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#64748b' }}>Extra</span>
-                                                                        </div>
-                                                                    )
-                                                                )}
+                                                                ))}
                                                             </div>
                                                         </div>
                                                     )}
