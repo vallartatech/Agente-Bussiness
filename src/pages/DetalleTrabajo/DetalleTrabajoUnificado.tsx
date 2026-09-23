@@ -671,9 +671,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     // MOCK DATA
     const [trabajo, setTrabajo] = useState<Trabajo | null>(null);
     const isSOS = Boolean(
-        trabajo?.tipo === "SOS" || 
-        trabajo?.prioridad === "Emergencia" || 
-        (trabajo?.titulo || '').toUpperCase().includes("SOS") || 
+        trabajo?.tipo === "SOS" ||
+        trabajo?.prioridad === "Emergencia" ||
+        (trabajo?.titulo || '').toUpperCase().includes("SOS") ||
         (trabajo?.titulo || '').toUpperCase().includes("EMERGENCIA") ||
         (trabajo as any)?.isEmergency ||
         (trabajo as any)?.is_emergency ||
@@ -1131,11 +1131,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const data = await getTrabajo(Number(id));
                 currentTech = data.trabajador?.nombre || "Sin Asignar";
                 const isEmergencyJob = Boolean(
-                    data.tipo === "SOS" || 
-                    data.prioridad === "Emergencia" || 
-                    data.is_emergency || 
-                    data.isEmergency || 
-                    (data.titulo || "").toUpperCase().includes("SOS") || 
+                    data.tipo === "SOS" ||
+                    data.prioridad === "Emergencia" ||
+                    data.is_emergency ||
+                    data.isEmergency ||
+                    (data.titulo || "").toUpperCase().includes("SOS") ||
                     (data.titulo || "").toUpperCase().includes("EMERGENCIA") ||
                     (data as any)?.solicitud?.tipo === "SOS" ||
                     (data as any)?.solicitud?.prioridad === "Emergencia" ||
@@ -2480,53 +2480,37 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             ? selectedCategories.join(', ')
             : (activeServiceType === 'Otro' ? (customServiceType || 'Otro') : activeServiceType);
 
-        const sosRefaccionesList: any[] = [];
-        if (isSOS) {
-            activeItems.forEach((it, idx) => {
-                if (it.isQuoteIncluded !== false) {
-                    (it.quoteConceptos || []).forEach(c => {
-                        if (c.descripcion.trim() || c.precio) {
-                            sosRefaccionesList.push({
-                                pieza: activeItems.length > 1 ? `[Punto ${idx + 1}] ${c.descripcion}` : c.descripcion,
-                                cantidad: Number(c.cantidad) || 1,
-                                costo_estimado: c.precio ? String(c.precio) : ''
-                            });
-                        }
-                    });
-                    (it.quoteMateriales || []).forEach(m => {
-                        if (m.nombre.trim() || m.precio) {
-                            sosRefaccionesList.push({
-                                pieza: activeItems.length > 1 ? `[Punto ${idx + 1}] ${m.nombre}` : m.nombre,
-                                cantidad: Number(m.cantidad) || 1,
-                                costo_estimado: m.precio ? String(m.precio) : ''
-                            });
-                        }
-                    });
-                }
-            });
-        }
+        const perPointRefaccionesList: any[] = [];
+        activeItems.forEach((it, idx) => {
+            if (it.isQuoteIncluded !== false) {
+                (it.quoteConceptos || []).forEach(c => {
+                    if (c.descripcion?.trim() || c.precio) {
+                        perPointRefaccionesList.push({
+                            pieza: activeItems.length > 1 ? `[Punto ${idx + 1}] ${c.descripcion}` : c.descripcion,
+                            cantidad: Number(c.cantidad) || 1,
+                            costo_estimado: c.precio ? String(c.precio) : ''
+                        });
+                    }
+                });
+                (it.quoteMateriales || []).forEach(m => {
+                    if (m.nombre?.trim() || m.precio) {
+                        perPointRefaccionesList.push({
+                            pieza: activeItems.length > 1 ? `[Punto ${idx + 1}] ${m.nombre}` : m.nombre,
+                            cantidad: Number(m.cantidad) || 1,
+                            costo_estimado: m.precio ? String(m.precio) : ''
+                        });
+                    }
+                });
+            }
+        });
 
         const refaccionesList = refacciones.map(r => ({
             pieza: r.pieza,
             cantidad: Number(r.cantidad) || 1,
             costo_estimado: r.costo_estimado ? String(r.costo_estimado) : ''
-        })).concat(
-            isSOS ? sosRefaccionesList : (
-                isQuoteIncluded ? quoteConceptos.map(c => ({
-                    pieza: c.descripcion,
-                    cantidad: c.cantidad ? Number(c.cantidad) || 1 : 1,
-                    costo_estimado: c.precio ? String(c.precio) : ''
-                })) : []
-            )
-        ).concat(
-            !isSOS && isQuoteIncluded ? quoteMateriales.map(m => ({
-                pieza: m.nombre,
-                cantidad: m.cantidad ? Number(m.cantidad) || 1 : 1,
-                costo_estimado: m.precio ? String(m.precio) : ''
-            })) : []
-        );
+        })).concat(perPointRefaccionesList);
 
-        const combinedMateriales = isQuoteIncluded ? quoteComentarios : '';
+        const combinedMateriales = quoteComentarios || '';
 
         const preparedData = {
             id: trabajo?.id || 'SD',
@@ -2785,38 +2769,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 return;
             }
 
-            // Validar que la cotización sea obligatoria
-            if (isSOS) {
-                const hasValidSosQuote = activeItems.some(it =>
-                    it.isQuoteIncluded !== false &&
-                    (it.quoteConceptos || []).some(c => c.descripcion.trim() && parseFloat(c.precio) > 0)
+            // Validar que exista al menos un concepto de cotización con precio mayor a $0
+            const hasValidQuote = activeItems.some(it =>
+                it.isQuoteIncluded !== false &&
+                (it.quoteConceptos || []).some(c => c.descripcion?.trim() && parseFloat(c.precio) > 0)
+            );
+            if (!hasValidQuote) {
+                showAlert(
+                    "Cotización Requerida",
+                    "Debes ingresar la descripción y precio de cotización (mayor a $0) en los puntos de revisión antes de guardar.",
+                    "warning"
                 );
-                if (!hasValidSosQuote) {
-                    showAlert(
-                        "Cotización Obligatoria",
-                        "Es obligatorio incluir al menos un concepto de cotización con descripción y precio en los puntos de revisión antes de guardar.",
-                        "warning"
-                    );
-                    return;
-                }
-            } else {
-                if (!isQuoteIncluded) {
-                    showAlert(
-                        "Cotización Obligatoria",
-                        "Es obligatorio incluir una cotización para poder guardar este registro de actividad.",
-                        "warning"
-                    );
-                    return;
-                }
-                const validConceptos = quoteConceptos.filter(c => c.descripcion.trim() && parseFloat(c.precio) > 0);
-                if (validConceptos.length === 0) {
-                    showAlert(
-                        "Cotización Incompleta",
-                        "Debes ingresar al menos un concepto de servicio con su descripción y precio mayor a $0 antes de guardar.",
-                        "warning"
-                    );
-                    return;
-                }
+                return;
             }
 
             const combinedDesc = activeItems.length > 0
@@ -2857,53 +2821,55 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             };
             desc += ` \n|||SERVICE_DATA||| ${JSON.stringify(serviceData)}`;
 
-            if (isSOS) {
-                const sosConceptos: any[] = [];
-                const sosMateriales: any[] = [];
-                activeItems.forEach((it, idx) => {
-                    if (it.isQuoteIncluded !== false) {
-                        (it.quoteConceptos || []).forEach(c => {
-                            if (c.descripcion.trim() || c.precio) {
-                                sosConceptos.push({
-                                    ...c,
-                                    descripcion: activeItems.length > 1 ? `[Punto ${idx + 1}] ${c.descripcion}` : c.descripcion,
-                                    puntoIndex: idx + 1
-                                });
-                            }
-                        });
-                        (it.quoteMateriales || []).forEach(m => {
-                            if (m.nombre.trim() || m.precio) {
-                                sosMateriales.push({
-                                    ...m,
-                                    nombre: activeItems.length > 1 ? `[Punto ${idx + 1}] ${m.nombre}` : m.nombre,
-                                    puntoIndex: idx + 1
-                                });
-                            }
-                        });
-                    }
-                });
-                if (sosConceptos.length > 0 || sosMateriales.length > 0) {
-                    const quotePayload = {
-                        conceptos: sosConceptos,
-                        materiales: sosMateriales,
-                        comentarios: quoteComentarios,
-                        itemsQuote: activeItems.map((it, idx) => ({
-                            puntoIndex: idx + 1,
-                            descripcion: it.descripcion,
-                            isQuoteIncluded: it.isQuoteIncluded !== false,
-                            conceptos: it.quoteConceptos || [],
-                            materiales: it.quoteMateriales || [],
-                            subtotal: ((it.quoteConceptos || []).reduce((acc, c) => acc + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0)) +
-                                ((it.quoteMateriales || []).reduce((acc, m) => acc + ((Number(m.cantidad) || 1) * (parseFloat(m.precio) || 0)), 0))
-                        }))
-                    };
-                    desc += ` \n|||QUOTE_DATA||| ${JSON.stringify(quotePayload)}`;
+            const allConceptos: any[] = [];
+            const allMateriales: any[] = [];
+            const itemsQuote = activeItems.map((it, idx) => {
+                const ptConceptos = (it.quoteConceptos || []).filter(c => c.descripcion?.trim() || c.precio);
+                const ptMateriales = (it.quoteMateriales || []).filter(m => m.nombre?.trim() || m.precio);
+                
+                if (it.isQuoteIncluded !== false) {
+                    ptConceptos.forEach(c => {
+                        if (c.descripcion?.trim() || c.precio) {
+                            allConceptos.push({
+                                ...c,
+                                descripcion: activeItems.length > 1 ? `[Punto ${idx + 1}] ${c.descripcion}` : c.descripcion,
+                                puntoIndex: idx + 1
+                            });
+                        }
+                    });
+                    ptMateriales.forEach(m => {
+                        if (m.nombre?.trim() || m.precio) {
+                            allMateriales.push({
+                                ...m,
+                                nombre: activeItems.length > 1 ? `[Punto ${idx + 1}] ${m.nombre}` : m.nombre,
+                                puntoIndex: idx + 1
+                            });
+                        }
+                    });
                 }
-            } else if (isQuoteIncluded) {
+
+                const subtotal = ptConceptos.reduce((acc, c) => acc + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0) +
+                                 ptMateriales.reduce((acc, m) => acc + ((Number(m.cantidad) || 1) * (parseFloat(m.precio) || 0)), 0);
+
+                return {
+                    puntoIndex: idx + 1,
+                    descripcion: it.descripcion,
+                    tipo: it.tipoActividad || 'Mantenimiento',
+                    marca: it.marca || '',
+                    modelo: it.modelo || '',
+                    isQuoteIncluded: it.isQuoteIncluded !== false,
+                    conceptos: ptConceptos,
+                    materiales: ptMateriales,
+                    subtotal: subtotal
+                };
+            });
+
+            if (allConceptos.length > 0 || allMateriales.length > 0) {
                 const quotePayload = {
-                    conceptos: quoteConceptos.filter(c => c.descripcion.trim()),
-                    materiales: quoteMateriales.filter(m => m.nombre.trim()),
-                    comentarios: quoteComentarios
+                    conceptos: allConceptos,
+                    materiales: allMateriales,
+                    comentarios: quoteComentarios,
+                    itemsQuote: itemsQuote
                 };
                 desc += ` \n|||QUOTE_DATA||| ${JSON.stringify(quotePayload)}`;
             }
@@ -4101,7 +4067,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         try {
             const finalMonto = customTotal !== undefined ? customTotal : (cotizaciones.find(c => c.id === cotizId)?.monto || 0);
             await updateCotizacionStatus(cotizId, "Aprobada");
-            await updateEstadoTrabajo(trabajo.id, { 
+            await updateEstadoTrabajo(trabajo.id, {
                 estado: "Cotización Aprobada",
                 cotizacion_aceptada: {
                     monto: String(finalMonto),
@@ -7319,7 +7285,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                 try {
                                                                     const raw = localStorage.getItem(`quote_accepted_items_${cotiz.id}`) || localStorage.getItem(`quote_accepted_items_${trabajo?.id}`);
                                                                     if (raw) acceptedStored = JSON.parse(raw);
-                                                                } catch {}
+                                                                } catch { }
                                                             }
 
                                                             const hasItems = (conceptLines.length + materialLines.length) > 0;
@@ -7361,8 +7327,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                             const displayTotal = isPending && hasItems ? dynamicTotal : Number(cotiz.monto || 0);
 
                                                             const cardClass = `${styles.clientCotizCard}${isApproved ? ' ' + styles.approved :
-                                                                    isRecotizRequested ? ' ' + styles.recotizacion :
-                                                                        isRejected ? ' ' + styles.rejected : ''
+                                                                isRecotizRequested ? ' ' + styles.recotizacion :
+                                                                    isRejected ? ' ' + styles.rejected : ''
                                                                 }`;
 
                                                             return (
@@ -7382,8 +7348,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                         <div style={{ marginBottom: '16px' }}>
                                                                             <span className={`${styles.clientCotizBadge} ${isApproved ? styles.approved :
-                                                                                    isRecotizRequested ? styles.recotizacion :
-                                                                                        isRejected ? styles.rejected : styles.pending
+                                                                                isRecotizRequested ? styles.recotizacion :
+                                                                                    isRejected ? styles.rejected : styles.pending
                                                                                 }`}>
                                                                                 {isApproved ? '✓ Aprobada' : isRecotizRequested ? '🔁 Re-Cotización Solicitada' : isRejected ? '✕ Rechazada' : '⏳ Pendiente de Revisión'}
                                                                             </span>
@@ -10691,8 +10657,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                         modelo: nextEquip ? (nextEquip.modelo || '') : '',
                                                         pieza: '',
                                                         garantia: '',
-                                                        isQuoteIncluded: isSOS,
-                                                        quoteConceptos: isSOS ? [{ descripcion: '', cantidad: '1', precio: '' }] : [],
+                                                        isQuoteIncluded: true,
+                                                        quoteConceptos: [{ descripcion: '', cantidad: '1', precio: '' }],
                                                         quoteMateriales: [],
                                                         quoteComentarios: ''
                                                     }]);
@@ -11150,404 +11116,254 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                     </div>
                                                 </div>
 
-                                                {/* COTIZACIÓN POR PUNTO DE REVISIÓN EN SOS */}
-                                                {isSOS && (
-                                                    <div style={{ marginTop: '16px', background: '#fffbeb', padding: '14px 16px', borderRadius: '12px', border: '1.5px solid #fde68a' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: item.isQuoteIncluded !== false ? '12px' : '0' }}>
-                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '800', color: '#b45309', cursor: 'pointer' }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={item.isQuoteIncluded !== false}
-                                                                    onChange={(e) => {
-                                                                        const checked = e.target.checked;
-                                                                        setTaskItems(prev => prev.map((it, i) => i === index ? {
-                                                                            ...it,
-                                                                            isQuoteIncluded: checked,
-                                                                            quoteConceptos: checked && (!it.quoteConceptos || it.quoteConceptos.length === 0) ? [{ descripcion: it.descripcion || '', cantidad: '1', precio: '' }] : it.quoteConceptos
-                                                                        } : it));
-                                                                    }}
-                                                                    style={{ width: '16px', height: '16px', accentColor: '#d97706' }}
-                                                                />
-                                                                💰 Cotización para el Punto {index + 1}
-                                                            </label>
-                                                            {item.isQuoteIncluded !== false && (
-                                                                <span style={{ fontSize: '11px', fontWeight: '800', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #fde68a' }}>
-                                                                    Total Punto: ${(
-                                                                        ((item.quoteConceptos || []).reduce((acc, c) => acc + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0)) +
-                                                                        ((item.quoteMateriales || []).reduce((acc, m) => acc + ((Number(m.cantidad) || 1) * (parseFloat(m.precio) || 0)), 0))
-                                                                    ).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                                </span>
-                                                            )}
-                                                        </div>
-
+                                                {/* COTIZACIÓN POR PUNTO DE REVISIÓN */}
+                                                <div style={{ marginTop: '16px', background: '#fffbeb', padding: '16px', borderRadius: '12px', border: '1.5px solid #fed7aa' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: item.isQuoteIncluded !== false ? '12px' : '0' }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '800', color: '#9a3412', cursor: 'pointer' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={item.isQuoteIncluded !== false}
+                                                                onChange={(e) => {
+                                                                    const checked = e.target.checked;
+                                                                    setTaskItems(prev => prev.map((it, i) => i === index ? {
+                                                                        ...it,
+                                                                        isQuoteIncluded: checked,
+                                                                        quoteConceptos: checked && (!it.quoteConceptos || it.quoteConceptos.length === 0) ? [{ descripcion: it.descripcion || '', cantidad: '1', precio: '' }] : it.quoteConceptos
+                                                                    } : it));
+                                                                }}
+                                                                style={{ width: '16px', height: '16px', accentColor: '#ea580c' }}
+                                                            />
+                                                            💰 Cotización para el Punto {index + 1}
+                                                        </label>
                                                         {item.isQuoteIncluded !== false && (
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
-                                                                {/* 1. CONCEPTOS DE SERVICIO PARA ESTE PUNTO */}
-                                                                <div>
-                                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#92400e', marginBottom: '6px', textTransform: 'uppercase' }}>
-                                                                        1. Mano de Obra / Concepto de Servicio:
-                                                                    </label>
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                        {(item.quoteConceptos && item.quoteConceptos.length > 0 ? item.quoteConceptos : [{ descripcion: item.descripcion || '', cantidad: '1', precio: '' }]).map((concepto, cIdx) => (
-                                                                            <div key={cIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#ffffff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                                                                <input
-                                                                                    placeholder="Descripción del concepto (ej. Reparación de fuga)..."
-                                                                                    value={concepto.descripcion}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        setTaskItems(prev => prev.map((it, i) => {
-                                                                                            if (i !== index) return it;
-                                                                                            const currConceptos = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
-                                                                                            currConceptos[cIdx] = { ...currConceptos[cIdx], descripcion: val };
-                                                                                            return { ...it, quoteConceptos: currConceptos };
-                                                                                        }));
-                                                                                    }}
-                                                                                    style={{ flex: 3, padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-                                                                                />
-                                                                                <input
-                                                                                    type="number"
-                                                                                    placeholder="Cant."
-                                                                                    value={concepto.cantidad}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        setTaskItems(prev => prev.map((it, i) => {
-                                                                                            if (i !== index) return it;
-                                                                                            const currConceptos = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
-                                                                                            currConceptos[cIdx] = { ...currConceptos[cIdx], cantidad: val };
-                                                                                            return { ...it, quoteConceptos: currConceptos };
-                                                                                        }));
-                                                                                    }}
-                                                                                    style={{ width: '55px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-                                                                                />
-                                                                                <input
-                                                                                    type="number"
-                                                                                    placeholder="Precio ($)"
-                                                                                    value={concepto.precio}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        setTaskItems(prev => prev.map((it, i) => {
-                                                                                            if (i !== index) return it;
-                                                                                            const currConceptos = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
-                                                                                            currConceptos[cIdx] = { ...currConceptos[cIdx], precio: val };
-                                                                                            return { ...it, quoteConceptos: currConceptos };
-                                                                                        }));
-                                                                                    }}
-                                                                                    style={{ width: '85px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-                                                                                />
-                                                                                {(item.quoteConceptos || []).length > 1 && (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => {
-                                                                                            setTaskItems(prev => prev.map((it, i) => {
-                                                                                                if (i !== index) return it;
-                                                                                                const currConceptos = (it.quoteConceptos || []).filter((_, idx) => idx !== cIdx);
-                                                                                                return { ...it, quoteConceptos: currConceptos };
-                                                                                            }));
-                                                                                        }}
-                                                                                        style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '11px' }}
-                                                                                    >
-                                                                                        ✕
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setTaskItems(prev => prev.map((it, i) => {
-                                                                                    if (i !== index) return it;
-                                                                                    const curr = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
-                                                                                    return { ...it, quoteConceptos: [...curr, { descripcion: '', cantidad: '1', precio: '' }] };
-                                                                                }));
-                                                                            }}
-                                                                            style={{ background: '#ffffff', color: '#d97706', border: '1px dashed #f59e0b', padding: '6px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: '700' }}
-                                                                        >
-                                                                            + Agregar Concepto al Punto {index + 1}
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
+                                                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#c2410c', background: '#ffedd5', padding: '3px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                                                Subtotal Punto {index + 1}: ${(
+                                                                    ((item.quoteConceptos || []).reduce((acc, c) => acc + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0)) +
+                                                                    ((item.quoteMateriales || []).reduce((acc, m) => acc + ((Number(m.cantidad) || 1) * (parseFloat(m.precio) || 0)), 0))
+                                                                ).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        )}
+                                                    </div>
 
-                                                                {/* 2. MATERIALES PARA ESTE PUNTO */}
-                                                                <div>
-                                                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#92400e', marginBottom: '6px', textTransform: 'uppercase' }}>
-                                                                        2. Materiales / Refacciones de este punto: <span style={{ fontWeight: '400', fontSize: '10px' }}>(Opcional)</span>
-                                                                    </label>
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                        {(item.quoteMateriales || []).map((mat, mIdx) => (
-                                                                            <div key={mIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#ffffff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                                                                <input
-                                                                                    placeholder="Nombre del material..."
-                                                                                    value={mat.nombre}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        setTaskItems(prev => prev.map((it, i) => {
-                                                                                            if (i !== index) return it;
-                                                                                            const currMats = [...(it.quoteMateriales || [])];
-                                                                                            currMats[mIdx] = { ...currMats[mIdx], nombre: val };
-                                                                                            return { ...it, quoteMateriales: currMats };
-                                                                                        }));
-                                                                                    }}
-                                                                                    style={{ flex: 3, padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-                                                                                />
-                                                                                <input
-                                                                                    type="number"
-                                                                                    placeholder="Cant."
-                                                                                    value={mat.cantidad}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        setTaskItems(prev => prev.map((it, i) => {
-                                                                                            if (i !== index) return it;
-                                                                                            const currMats = [...(it.quoteMateriales || [])];
-                                                                                            currMats[mIdx] = { ...currMats[mIdx], cantidad: val };
-                                                                                            return { ...it, quoteMateriales: currMats };
-                                                                                        }));
-                                                                                    }}
-                                                                                    style={{ width: '55px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-                                                                                />
-                                                                                <input
-                                                                                    type="number"
-                                                                                    placeholder="Costo ($)"
-                                                                                    value={mat.precio}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        setTaskItems(prev => prev.map((it, i) => {
-                                                                                            if (i !== index) return it;
-                                                                                            const currMats = [...(it.quoteMateriales || [])];
-                                                                                            currMats[mIdx] = { ...currMats[mIdx], precio: val };
-                                                                                            return { ...it, quoteMateriales: currMats };
-                                                                                        }));
-                                                                                    }}
-                                                                                    style={{ width: '85px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
-                                                                                />
+                                                    {item.isQuoteIncluded !== false && (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
+                                                            {/* 1. CONCEPTOS DE SERVICIO PARA ESTE PUNTO */}
+                                                            <div>
+                                                                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#9a3412', marginBottom: '6px', textTransform: 'uppercase' }}>
+                                                                    1. Mano de Obra / Concepto de Servicio:
+                                                                </label>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {(item.quoteConceptos && item.quoteConceptos.length > 0 ? item.quoteConceptos : [{ descripcion: item.descripcion || '', cantidad: '1', precio: '' }]).map((concepto, cIdx) => (
+                                                                        <div key={cIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#ffffff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                                                            <input
+                                                                                placeholder="Descripción del concepto (ej. Reparación de fuga)..."
+                                                                                value={concepto.descripcion}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currConceptos = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
+                                                                                        currConceptos[cIdx] = { ...currConceptos[cIdx], descripcion: val };
+                                                                                        return { ...it, quoteConceptos: currConceptos };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ flex: 3, padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                                                            />
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Cant."
+                                                                                value={concepto.cantidad}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currConceptos = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
+                                                                                        currConceptos[cIdx] = { ...currConceptos[cIdx], cantidad: val };
+                                                                                        return { ...it, quoteConceptos: currConceptos };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ width: '55px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                                                            />
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Precio ($)"
+                                                                                value={concepto.precio}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currConceptos = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
+                                                                                        currConceptos[cIdx] = { ...currConceptos[cIdx], precio: val };
+                                                                                        return { ...it, quoteConceptos: currConceptos };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ width: '85px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                                                            />
+                                                                            {(item.quoteConceptos || []).length > 1 && (
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
                                                                                         setTaskItems(prev => prev.map((it, i) => {
                                                                                             if (i !== index) return it;
-                                                                                            const currMats = (it.quoteMateriales || []).filter((_, idx) => idx !== mIdx);
-                                                                                            return { ...it, quoteMateriales: currMats };
+                                                                                            const currConceptos = (it.quoteConceptos || []).filter((_, idx) => idx !== cIdx);
+                                                                                            return { ...it, quoteConceptos: currConceptos };
                                                                                         }));
                                                                                     }}
                                                                                     style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '11px' }}
                                                                                 >
                                                                                     ✕
                                                                                 </button>
-                                                                            </div>
-                                                                        ))}
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setTaskItems(prev => prev.map((it, i) => {
-                                                                                    if (i !== index) return it;
-                                                                                    const curr = it.quoteMateriales ? [...it.quoteMateriales] : [];
-                                                                                    return { ...it, quoteMateriales: [...curr, { nombre: '', cantidad: '1', precio: '' }] };
-                                                                                }));
-                                                                            }}
-                                                                            style={{ background: '#ffffff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '6px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: '700' }}
-                                                                        >
-                                                                            + Agregar Material al Punto {index + 1}
-                                                                        </button>
-                                                                    </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setTaskItems(prev => prev.map((it, i) => {
+                                                                                if (i !== index) return it;
+                                                                                const curr = it.quoteConceptos && it.quoteConceptos.length > 0 ? [...it.quoteConceptos] : [{ descripcion: '', cantidad: '1', precio: '' }];
+                                                                                return { ...it, quoteConceptos: [...curr, { descripcion: '', cantidad: '1', precio: '' }] };
+                                                                            }));
+                                                                        }}
+                                                                        style={{ background: '#ffffff', color: '#ea580c', border: '1px dashed #f59e0b', padding: '6px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: '700' }}
+                                                                    >
+                                                                        + Agregar Concepto al Punto {index + 1}
+                                                                    </button>
                                                                 </div>
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                )}
+
+                                                            {/* 2. MATERIALES PARA ESTE PUNTO */}
+                                                            <div>
+                                                                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#9a3412', marginBottom: '6px', textTransform: 'uppercase' }}>
+                                                                    2. Materiales / Refacciones de este punto: <span style={{ fontWeight: '400', fontSize: '10px' }}>(Opcional)</span>
+                                                                </label>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {(item.quoteMateriales || []).map((mat, mIdx) => (
+                                                                        <div key={mIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#ffffff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                                                            <input
+                                                                                placeholder="Nombre del material..."
+                                                                                value={mat.nombre}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currMats = [...(it.quoteMateriales || [])];
+                                                                                        currMats[mIdx] = { ...currMats[mIdx], nombre: val };
+                                                                                        return { ...it, quoteMateriales: currMats };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ flex: 3, padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                                                            />
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Cant."
+                                                                                value={mat.cantidad}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currMats = [...(it.quoteMateriales || [])];
+                                                                                        currMats[mIdx] = { ...currMats[mIdx], cantidad: val };
+                                                                                        return { ...it, quoteMateriales: currMats };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ width: '55px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                                                            />
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Costo ($)"
+                                                                                value={mat.precio}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currMats = [...(it.quoteMateriales || [])];
+                                                                                        currMats[mIdx] = { ...currMats[mIdx], precio: val };
+                                                                                        return { ...it, quoteMateriales: currMats };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ width: '85px', padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setTaskItems(prev => prev.map((it, i) => {
+                                                                                        if (i !== index) return it;
+                                                                                        const currMats = (it.quoteMateriales || []).filter((_, idx) => idx !== mIdx);
+                                                                                        return { ...it, quoteMateriales: currMats };
+                                                                                    }));
+                                                                                }}
+                                                                                style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '11px' }}
+                                                                            >
+                                                                                ✕
+                                                                            </button>
+                                                                        </div>
+                                                                    ))}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setTaskItems(prev => prev.map((it, i) => {
+                                                                                if (i !== index) return it;
+                                                                                const curr = it.quoteMateriales ? [...it.quoteMateriales] : [];
+                                                                                return { ...it, quoteMateriales: [...curr, { nombre: '', cantidad: '1', precio: '' }] };
+                                                                            }));
+                                                                        }}
+                                                                        style={{ background: '#ffffff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '6px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: '700' }}
+                                                                    >
+                                                                        + Agregar Material al Punto {index + 1}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
-                                {!isSOS && (
-                                    <div style={{ marginTop: '18px', background: '#fffbeb', padding: '16px 18px', borderRadius: '14px', border: '1.5px solid #fed7aa' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isQuoteIncluded ? '14px' : '0' }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13.5px', fontWeight: '800', color: '#9a3412', cursor: 'pointer' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isQuoteIncluded}
-                                                    onChange={(e) => setIsQuoteIncluded(e.target.checked)}
-                                                    style={{ width: '18px', height: '18px', accentColor: '#f26522' }}
-                                                />
-                                                💰 Cotización para el Administrador <span style={{ fontSize: '11px', background: '#ea580c', color: '#fff', padding: '2px 8px', borderRadius: '6px', fontWeight: '800', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Obligatorio</span>
-                                            </label>
-                                            {isQuoteIncluded && (
-                                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#c2410c', background: '#ffedd5', padding: '3px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                                    Total: ${(
-                                                        quoteConceptos.reduce((sum, c) => sum + (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1), 0) +
-                                                        quoteMateriales.reduce((sum, m) => sum + (parseFloat(m.precio) || 0) * (parseFloat(m.cantidad) || 1), 0)
-                                                    ).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {/* RESUMEN TOTAL DE LA COTIZACIÓN (SUMA DE TODOS LOS PUNTOS) */}
+                                <div style={{ marginTop: '20px', background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', padding: '18px 20px', borderRadius: '16px', border: '2px solid #fdba74', boxShadow: '0 4px 14px rgba(242, 101, 34, 0.08)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                        <div>
+                                            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#9a3412', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                💳 Resumen Total de la Cotización
+                                                <span style={{ fontSize: '11px', background: '#ea580c', color: '#fff', padding: '2px 8px', borderRadius: '6px', fontWeight: '800' }}>
+                                                    {taskItems.length} {taskItems.length === 1 ? 'Punto' : 'Puntos'}
                                                 </span>
-                                            )}
+                                            </h4>
+                                            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#c2410c' }}>
+                                                {isSOS
+                                                    ? '⚡ En SOS, cada punto se desglosa para que el cliente seleccione los servicios en su carrito de compras.'
+                                                    : 'Suma consolidada de mano de obra y materiales de todos los puntos de revisión.'}
+                                            </p>
                                         </div>
-
-                                        {isQuoteIncluded && (
-                                            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                                                {/* 1. CONCEPTOS DE SERVICIO */}
-                                                <div>
-                                                    <h4 style={{ color: '#d97706', fontSize: '14px', fontWeight: '800', borderBottom: '1.5px solid #fde68a', paddingBottom: '6px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>1. Conceptos de Servicio</h4>
-                                                    <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                        {quoteConceptos.map((concepto, i) => (
-                                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                                                <div>
-                                                                    <label style={{ fontSize: '11.5px', fontWeight: 'bold', color: '#1e293b', marginBottom: '4px', display: 'block' }}>Descripción del Servicio</label>
-                                                                    <input
-                                                                        placeholder="Ej. Cambio de carbones a máquina..."
-                                                                        value={concepto.descripcion}
-                                                                        onChange={(e) => {
-                                                                            const newC = [...quoteConceptos];
-                                                                            newC[i].descripcion = e.target.value;
-                                                                            setQuoteConceptos(newC);
-                                                                        }}
-                                                                        style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', background: '#fff' }}
-                                                                    />
-                                                                </div>
-                                                                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px', display: 'block' }}>Cant.</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="1"
-                                                                            value={concepto.cantidad}
-                                                                            onChange={(e) => {
-                                                                                const newC = [...quoteConceptos];
-                                                                                newC[i].cantidad = e.target.value;
-                                                                                setQuoteConceptos(newC);
-                                                                            }}
-                                                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', background: '#fff' }}
-                                                                        />
-                                                                    </div>
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px', display: 'block' }}>Precio U. ($)</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="0.00"
-                                                                            value={concepto.precio}
-                                                                            onChange={(e) => {
-                                                                                const newC = [...quoteConceptos];
-                                                                                newC[i].precio = e.target.value;
-                                                                                setQuoteConceptos(newC);
-                                                                            }}
-                                                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', background: '#fff' }}
-                                                                        />
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={() => setQuoteConceptos(quoteConceptos.filter((_, idx) => idx !== i))}
-                                                                        style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', width: '38px', height: '38px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                                        title="Eliminar Concepto"
-                                                                    >
-                                                                        🗑️
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                        <button
-                                                            onClick={() => setQuoteConceptos([...quoteConceptos, { descripcion: '', cantidad: '1', precio: '' }])}
-                                                            style={{ background: '#f1f5f9', color: '#475569', border: '1px dashed #cbd5e1', padding: '9px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', width: '100%', boxSizing: 'border-box', transition: 'all 0.2s' }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
-                                                        >
-                                                            + AGREGAR CONCEPTO
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* 2. MATERIALES */}
-                                                <div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1.5px solid #fde68a', paddingBottom: '6px', marginBottom: '12px', gap: '10px' }}>
-                                                        <h4 style={{ color: '#d97706', fontSize: '14px', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '0.3px' }}>2. Materiales</h4>
-                                                        <span style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#f59e0b', background: '#fffbeb', padding: '2px 8px', borderRadius: '12px', border: '1px solid #fde68a' }}>(Opcional)</span>
-                                                    </div>
-                                                    <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                        {quoteMateriales.map((mat, i) => (
-                                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                                                <div>
-                                                                    <label style={{ fontSize: '11.5px', fontWeight: 'bold', color: '#1e293b', marginBottom: '4px', display: 'block' }}>Nombre del Material</label>
-                                                                    <input
-                                                                        placeholder="Ej. Carbones..."
-                                                                        value={mat.nombre}
-                                                                        onChange={(e) => {
-                                                                            const newM = [...quoteMateriales];
-                                                                            newM[i].nombre = e.target.value;
-                                                                            setQuoteMateriales(newM);
-                                                                        }}
-                                                                        style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', background: '#fff' }}
-                                                                    />
-                                                                </div>
-                                                                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px', display: 'block' }}>Cant.</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="1"
-                                                                            value={mat.cantidad}
-                                                                            onChange={(e) => {
-                                                                                const newM = [...quoteMateriales];
-                                                                                newM[i].cantidad = e.target.value;
-                                                                                setQuoteMateriales(newM);
-                                                                            }}
-                                                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', background: '#fff' }}
-                                                                        />
-                                                                    </div>
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px', display: 'block' }}>Costo U. ($)</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="0.00"
-                                                                            value={mat.precio}
-                                                                            onChange={(e) => {
-                                                                                const newM = [...quoteMateriales];
-                                                                                newM[i].precio = e.target.value;
-                                                                                setQuoteMateriales(newM);
-                                                                            }}
-                                                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box', background: '#fff' }}
-                                                                        />
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={() => setQuoteMateriales(quoteMateriales.filter((_, idx) => idx !== i))}
-                                                                        style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', width: '38px', height: '38px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                                        title="Eliminar Material"
-                                                                    >
-                                                                        🗑️
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                        <button
-                                                            onClick={() => setQuoteMateriales([...quoteMateriales, { nombre: '', cantidad: '1', precio: '' }])}
-                                                            style={{ background: '#f1f5f9', color: '#475569', border: '1px dashed #cbd5e1', padding: '9px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', width: '100%', boxSizing: 'border-box', transition: 'all 0.2s' }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
-                                                        >
-                                                            + AGREGAR MATERIAL
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* COMENTARIOS INTERNOS */}
-                                                <div style={{ background: '#fffbeb', borderRadius: '12px', padding: '14px', border: '1px solid #fde68a' }}>
-                                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#b45309', marginBottom: '6px' }}>COMENTARIOS INTERNOS (Solo Admin/Técnico):</label>
-                                                    <textarea
-                                                        value={quoteComentarios}
-                                                        onChange={(e) => setQuoteComentarios(e.target.value)}
-                                                        placeholder="Notas que el cliente NO verá..."
-                                                        style={{ width: '100%', height: '70px', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fcd34d', resize: 'none', background: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
-                                                    />
-                                                </div>
-
-                                                {/* SUBTOTAL SUMMARY */}
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', marginTop: '6px' }}>
-                                                    <span style={{ fontSize: '13.5px', fontWeight: 'bold', color: '#64748b' }}>Subtotal (Servicios + Materiales):</span>
-                                                    <span style={{ fontSize: '17px', fontWeight: '900', color: '#0f172a' }}>
-                                                        ${(
-                                                            quoteConceptos.reduce((sum, c) => sum + (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1), 0) +
-                                                            quoteMateriales.reduce((sum, m) => sum + (parseFloat(m.precio) || 0) * (parseFloat(m.cantidad) || 1), 0)
-                                                        ).toFixed(2)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#9a3412', textTransform: 'uppercase' }}>Suma Total</span>
+                                            <span style={{ fontSize: '22px', fontWeight: '900', color: '#ea580c' }}>
+                                                ${taskItems.reduce((acc, it) => {
+                                                    if (it.isQuoteIncluded === false) return acc;
+                                                    const cTotal = (it.quoteConceptos || []).reduce((cAcc, c) => cAcc + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
+                                                    const mTotal = (it.quoteMateriales || []).reduce((mAcc, m) => mAcc + ((Number(m.cantidad) || 1) * (parseFloat(m.precio) || 0)), 0);
+                                                    return acc + cTotal + mTotal;
+                                                }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                        </div>
                                     </div>
-                                )}
+
+                                    {/* COMENTARIOS INTERNOS */}
+                                    <div style={{ marginTop: '12px' }}>
+                                        <label style={{ display: 'block', fontSize: '11.5px', fontWeight: '800', color: '#9a3412', marginBottom: '6px' }}>
+                                            COMENTARIOS INTERNOS (Solo Admin/Técnico):
+                                        </label>
+                                        <textarea
+                                            value={quoteComentarios}
+                                            onChange={(e) => setQuoteComentarios(e.target.value)}
+                                            placeholder="Notas internas que el cliente NO verá..."
+                                            style={{ width: '100%', height: '60px', padding: '9px 12px', borderRadius: '8px', border: '1px solid #fcd34d', resize: 'none', background: '#fff', fontSize: '12.5px', boxSizing: 'border-box' }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div className={styles.modalActionsContainer} style={{ marginTop: '22px' }}>
@@ -12347,7 +12163,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 try {
                     const raw = localStorage.getItem(`quote_accepted_items_${previewQuote.id}`) || localStorage.getItem(`quote_accepted_items_${trabajo.id}`);
                     if (raw) quoteAcceptedItems = JSON.parse(raw);
-                } catch {}
+                } catch { }
                 return (
                     <CotizacionPDFPreview
                         trabajo={trabajo}
@@ -12590,7 +12406,3 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 };
 
 export default DetalleTrabajoUnificado;
-
-
-
-
