@@ -553,7 +553,11 @@ const AdminReporte: React.FC = () => {
                     setRefaccionesList(taskRefactions);
 
                     // Auto-selección inicial si hay equipos disponibles y es mantenimiento
-                    if (listEquips.length > 0 && (String(jobData.titulo || '').toLowerCase().includes('mantenimiento') || isEquipoTask)) {
+                    const isMaintenanceJob = String(jobData.titulo || '').toLowerCase().includes('mantenimiento') || 
+                                             String(targetAct?.tipo || '').toLowerCase().includes('mantenimiento') || 
+                                             targetAct?.tipo === 'Instalacion' || 
+                                             targetAct?.tipo === 'Instalación';
+                    if (listEquips.length > 0 && isMaintenanceJob) {
                         const firstEq = listEquips[0];
                         setSelectedEquipoIds([firstEq.id]);
                         setEquipoInfo({

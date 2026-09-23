@@ -3,7 +3,8 @@ import { getNegocio } from '../../services/negociosService';
 import { getMantenimientoSolicitudes } from '../../services/mantenimientoService';
 import HistorialEquipoModal from '../../components/modals/HistorialEquipoModal';
 import { 
-    HiOutlineCube
+    HiOutlineCube,
+    HiOutlineShieldCheck
 } from "react-icons/hi2";
 
 interface EquiposNegocioProps {
