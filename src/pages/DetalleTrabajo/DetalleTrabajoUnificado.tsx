@@ -1835,6 +1835,22 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     const [longitudLlegada, setLongitudLlegada] = useState<string | null>(null);
     const [showMapModal, setShowMapModal] = useState(false);
     const [horaLlegada, setHoraLlegada] = useState("");
+    const [selectedQuoteItems, setSelectedQuoteItems] = useState<{ [cotizId: string]: { [itemKey: string]: boolean } }>({});
+
+    const toggleQuoteItem = (cotizId: number | string, itemKey: string) => {
+        setSelectedQuoteItems(prev => {
+            const cId = String(cotizId);
+            const currentMap = prev[cId] || {};
+            const isCurrentlySelected = currentMap[itemKey] !== false;
+            return {
+                ...prev,
+                [cId]: {
+                    ...currentMap,
+                    [itemKey]: !isCurrentlySelected
+                }
+            };
+        });
+    };
 
     const openNewTaskModal = () => {
         setEditingTaskId(null);
@@ -3999,22 +4015,35 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         );
     };
 
-    const handleClienteAceptarCotizacion = async (cotizId: number) => {
+    const handleClienteAceptarCotizacion = async (cotizId: number, acceptedItems?: any[], customTotal?: number) => {
         if (!trabajo) return;
         if (isSOS) {
             return handleAdminAceptarCotizacionSOS(cotizId);
         }
         try {
+            const finalMonto = customTotal !== undefined ? customTotal : (cotizaciones.find(c => c.id === cotizId)?.monto || 0);
             await updateCotizacionStatus(cotizId, "Aprobada");
-            await updateEstadoTrabajo(trabajo.id, { estado: "Cotización Aprobada" });
-            setCotizaciones(prev => prev.map(c => c.id === cotizId ? { ...c, estado: "Aprobada" as const } : c));
+            await updateEstadoTrabajo(trabajo.id, { 
+                estado: "Cotización Aprobada",
+                cotizacion_aceptada: {
+                    monto: String(finalMonto),
+                    items_aceptados: acceptedItems || []
+                }
+            });
+
+            if (acceptedItems && acceptedItems.length > 0) {
+                localStorage.setItem(`quote_accepted_items_${cotizId}`, JSON.stringify(acceptedItems));
+                localStorage.setItem(`quote_accepted_items_${trabajo.id}`, JSON.stringify(acceptedItems));
+            }
+
+            setCotizaciones(prev => prev.map(c => c.id === cotizId ? { ...c, estado: "Aprobada" as const, monto: String(finalMonto) } : c));
             setTrabajo((prev: any) => prev ? { ...prev, estado: "Cotización Aprobada" } : prev);
             // Notificar al Admin y al Técnico
             try {
                 await createNotificacionByRole({
                     role: 'admin',
                     titulo: '📄 Cotización Aceptada',
-                    mensaje: `El cliente/encargado aceptó la propuesta de presupuesto para "${trabajo.sucursal || 'la sucursal'}".`,
+                    mensaje: `El cliente/encargado aceptó la propuesta de presupuesto ($${Number(finalMonto).toLocaleString('es-MX')}) para "${trabajo.sucursal || 'la sucursal'}".`,
                     enlace: `/menu/trabajo-detalle/${trabajo.id}`
                 });
 
@@ -4033,14 +4062,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     await createNotificacion({
                         user_id: targetTechUserAccept,
                         titulo: '🎉 Cotización Aceptada',
-                        mensaje: `¡Se ha aceptado tu propuesta de cotización para la sucursal "${trabajo.sucursal || ''}"! El trabajo te ha sido asignado.`,
+                        mensaje: `¡Se ha aceptado la propuesta de cotización para la sucursal "${trabajo.sucursal || ''}"! El trabajo te ha sido asignado.`,
                         enlace: `/tecnico/trabajo-detalle/${trabajo.id}`
                     });
                 }
             } catch (notiErr) {
                 console.error("Error enviando notificación de cotización aceptada:", notiErr);
             }
-            showAlert('Cotización Aceptada', 'Propuesta aceptada. Se ha notificado al técnico asignado.', 'success');
+            showAlert('Cotización Aceptada', `Propuesta aceptada por $${Number(finalMonto).toLocaleString('es-MX')}. Se ha notificado al equipo técnico y administrador.`, 'success');
         } catch (error: any) {
             showAlert('Error', error.response?.data?.message || error.message, 'error');
         }
@@ -4335,6 +4364,24 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         enlace: `/autonomo/trabajo-detalle/${trabajo.id}?tab=cotizacion`
                     });
                 } catch (e) { console.error("Error notificando admin autónomo:", e); }
+            }
+
+            // Notificar al Técnico directamente en flujos técnicos (SOS, Mantenimiento, Instalación o cuando hay técnico asignado)
+            if (isSOS || trabajo.tipo_servicio === 'Mantenimiento' || trabajo.tipo_servicio === 'Instalación' || trabajo.trabajador_id) {
+                const targetTechUser = (trabajo as any).tecnicoUserId
+                    || (trabajo as any).trabajador?.user_id
+                    || tecnicosData.find((t: any) => t.id === trabajo.trabajador_id)?.user_id;
+
+                if (targetTechUser) {
+                    try {
+                        await createNotificacion({
+                            user_id: targetTechUser,
+                            titulo: '🔁 Solicitud de Re-Cotización',
+                            mensaje: `El cliente solicita ajustar la propuesta "${cotizTitle}" (${cotizMonto}) para "${trabajo.sucursal || 'la sucursal'}". Motivo: ${recotizMotivo}`,
+                            enlace: `/tecnico/trabajo-detalle/${trabajo.id}?tab=cotizacion`
+                        });
+                    } catch (e) { console.error("Error notificando técnico:", e); }
+                }
             }
 
             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -7183,6 +7230,58 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                 }
                                                             });
 
+                                                            const parsePriceNumber = (priceStr: string) => {
+                                                                const cleaned = (priceStr || '').replace(/[^0-9.]/g, '');
+                                                                return parseFloat(cleaned) || 0;
+                                                            };
+
+                                                            const currentItemsMap = selectedQuoteItems[String(cotiz.id)] || {};
+                                                            let acceptedStored: any[] | null = null;
+                                                            if (isApproved && cotiz.id) {
+                                                                try {
+                                                                    const raw = localStorage.getItem(`quote_accepted_items_${cotiz.id}`) || localStorage.getItem(`quote_accepted_items_${trabajo?.id}`);
+                                                                    if (raw) acceptedStored = JSON.parse(raw);
+                                                                } catch {}
+                                                            }
+
+                                                            const hasItems = (conceptLines.length + materialLines.length) > 0;
+                                                            let dynamicTotal = 0;
+                                                            const acceptedItemsList: any[] = [];
+
+                                                            conceptLines.forEach((c, i) => {
+                                                                const key = `c_${i}`;
+                                                                const isSelected = currentItemsMap[key] !== false;
+                                                                const priceVal = parsePriceNumber(c.price);
+                                                                if (isSelected) {
+                                                                    dynamicTotal += priceVal;
+                                                                    acceptedItemsList.push({
+                                                                        key,
+                                                                        tipo: 'concepto',
+                                                                        nombre: c.name,
+                                                                        cantidad: c.qty,
+                                                                        precio: priceVal
+                                                                    });
+                                                                }
+                                                            });
+
+                                                            materialLines.forEach((m, i) => {
+                                                                const key = `m_${i}`;
+                                                                const isSelected = currentItemsMap[key] !== false;
+                                                                const priceVal = parsePriceNumber(m.price);
+                                                                if (isSelected) {
+                                                                    dynamicTotal += priceVal;
+                                                                    acceptedItemsList.push({
+                                                                        key,
+                                                                        tipo: 'material',
+                                                                        nombre: m.name,
+                                                                        cantidad: m.qty,
+                                                                        precio: priceVal
+                                                                    });
+                                                                }
+                                                            });
+
+                                                            const displayTotal = isPending && hasItems ? dynamicTotal : Number(cotiz.monto || 0);
+
                                                             const cardClass = `${styles.clientCotizCard}${isApproved ? ' ' + styles.approved :
                                                                     isRecotizRequested ? ' ' + styles.recotizacion :
                                                                         isRejected ? ' ' + styles.rejected : ''
@@ -7198,8 +7297,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                 <p className={styles.clientCotizCardSubtitle}>Registro #{idx + 1} · Bitácora de Cotización</p>
                                                                             </div>
                                                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                                                                <p className={styles.clientCotizPriceLabel}>MONTO TOTAL</p>
-                                                                                <p className={styles.clientCotizPrice}>${Number(cotiz.monto).toLocaleString('es-MX')}</p>
+                                                                                <p className={styles.clientCotizPriceLabel}>{isPending && hasItems ? 'TOTAL SELECCIONADO' : 'MONTO TOTAL'}</p>
+                                                                                <p className={styles.clientCotizPrice}>${displayTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                             </div>
                                                                         </div>
 
@@ -7219,36 +7318,136 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             </div>
                                                                         )}
 
+                                                                        {isPending && hasItems && (
+                                                                            <div style={{
+                                                                                background: '#f0fdf4',
+                                                                                border: '1.5px solid #bbf7d0',
+                                                                                borderRadius: '12px',
+                                                                                padding: '10px 14px',
+                                                                                marginBottom: '16px',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '10px'
+                                                                            }}>
+                                                                                <span style={{ fontSize: '20px' }}>🛒</span>
+                                                                                <p style={{ margin: 0, fontSize: '13px', color: '#166534', lineHeight: '1.4' }}>
+                                                                                    <strong>Selección de servicios:</strong> Puedes marcar o desmarcar los conceptos y materiales que desees contratar. El presupuesto se recalculará automáticamente.
+                                                                                </p>
+                                                                            </div>
+                                                                        )}
+
                                                                         <div className={styles.clientCotizSections}>
                                                                             <div className={styles.clientCotizSection}>
                                                                                 <p className={styles.clientCotizSectionLabel}><span>🔧</span> Conceptos de Servicio</p>
                                                                                 {conceptLines.length === 0 ? (
                                                                                     <p className={styles.clientCotizEmpty}>Sin conceptos registrados</p>
-                                                                                ) : conceptLines.map((c, i) => (
-                                                                                    <div key={i} className={styles.clientCotizItem}>
-                                                                                        <span className={styles.clientCotizItemQty}>{c.qty}</span>
-                                                                                        <span className={styles.clientCotizItemName}>{c.name}</span>
-                                                                                        <span className={styles.clientCotizItemPrice}>{c.price}</span>
-                                                                                    </div>
-                                                                                ))}
+                                                                                ) : conceptLines.map((c, i) => {
+                                                                                    const key = `c_${i}`;
+                                                                                    const isChecked = currentItemsMap[key] !== false;
+                                                                                    const isItemAccepted = isApproved ? (acceptedStored ? acceptedStored.some(it => it.nombre === c.name || it.key === key) : true) : isChecked;
+                                                                                    return (
+                                                                                        <div
+                                                                                            key={i}
+                                                                                            className={styles.clientCotizItem}
+                                                                                            style={{
+                                                                                                cursor: isPending ? 'pointer' : 'default',
+                                                                                                background: isPending && isChecked ? '#f8fafc' : isPending ? '#f1f5f9' : 'transparent',
+                                                                                                borderRadius: '8px',
+                                                                                                padding: '6px 8px',
+                                                                                                opacity: (!isPending && !isItemAccepted) ? 0.45 : 1,
+                                                                                                transition: 'all 0.15s ease'
+                                                                                            }}
+                                                                                            onClick={() => isPending && toggleQuoteItem(cotiz.id!, key)}
+                                                                                        >
+                                                                                            {isPending ? (
+                                                                                                <input
+                                                                                                    type="checkbox"
+                                                                                                    checked={isChecked}
+                                                                                                    onChange={() => toggleQuoteItem(cotiz.id!, key)}
+                                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                                    style={{ width: '18px', height: '18px', accentColor: '#f26522', cursor: 'pointer', flexShrink: 0 }}
+                                                                                                />
+                                                                                            ) : isApproved && acceptedStored ? (
+                                                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: isItemAccepted ? '#10b981' : '#94a3b8', flexShrink: 0 }}>
+                                                                                                    {isItemAccepted ? '✓' : '✕'}
+                                                                                                </span>
+                                                                                            ) : null}
+                                                                                            <span className={styles.clientCotizItemQty}>{c.qty}</span>
+                                                                                            <span className={styles.clientCotizItemName} style={{
+                                                                                                textDecoration: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? 'line-through' : 'none',
+                                                                                                color: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? '#94a3b8' : 'inherit'
+                                                                                            }}>
+                                                                                                {c.name}
+                                                                                                {isApproved && acceptedStored && !isItemAccepted && <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px', fontStyle: 'italic' }}>(No contratado)</span>}
+                                                                                            </span>
+                                                                                            <span className={styles.clientCotizItemPrice} style={{
+                                                                                                textDecoration: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? 'line-through' : 'none',
+                                                                                                color: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? '#94a3b8' : '#059669'
+                                                                                            }}>
+                                                                                                {c.price}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
                                                                             </div>
                                                                             <div className={styles.clientCotizSection}>
                                                                                 <p className={styles.clientCotizSectionLabel}><span>🪛</span> Materiales</p>
                                                                                 {materialLines.length === 0 ? (
                                                                                     <p className={styles.clientCotizEmpty}>Sin materiales</p>
-                                                                                ) : materialLines.map((m, i) => (
-                                                                                    <div key={i} className={styles.clientCotizItem}>
-                                                                                        <span className={styles.clientCotizItemQty}>{m.qty}</span>
-                                                                                        <span className={styles.clientCotizItemName}>{m.name}</span>
-                                                                                        <span className={styles.clientCotizItemPrice}>{m.price}</span>
-                                                                                    </div>
-                                                                                ))}
+                                                                                ) : materialLines.map((m, i) => {
+                                                                                    const key = `m_${i}`;
+                                                                                    const isChecked = currentItemsMap[key] !== false;
+                                                                                    const isItemAccepted = isApproved ? (acceptedStored ? acceptedStored.some(it => it.nombre === m.name || it.key === key) : true) : isChecked;
+                                                                                    return (
+                                                                                        <div
+                                                                                            key={i}
+                                                                                            className={styles.clientCotizItem}
+                                                                                            style={{
+                                                                                                cursor: isPending ? 'pointer' : 'default',
+                                                                                                background: isPending && isChecked ? '#f8fafc' : isPending ? '#f1f5f9' : 'transparent',
+                                                                                                borderRadius: '8px',
+                                                                                                padding: '6px 8px',
+                                                                                                opacity: (!isPending && !isItemAccepted) ? 0.45 : 1,
+                                                                                                transition: 'all 0.15s ease'
+                                                                                            }}
+                                                                                            onClick={() => isPending && toggleQuoteItem(cotiz.id!, key)}
+                                                                                        >
+                                                                                            {isPending ? (
+                                                                                                <input
+                                                                                                    type="checkbox"
+                                                                                                    checked={isChecked}
+                                                                                                    onChange={() => toggleQuoteItem(cotiz.id!, key)}
+                                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                                    style={{ width: '18px', height: '18px', accentColor: '#f26522', cursor: 'pointer', flexShrink: 0 }}
+                                                                                                />
+                                                                                            ) : isApproved && acceptedStored ? (
+                                                                                                <span style={{ fontSize: '13px', fontWeight: '800', color: isItemAccepted ? '#10b981' : '#94a3b8', flexShrink: 0 }}>
+                                                                                                    {isItemAccepted ? '✓' : '✕'}
+                                                                                                </span>
+                                                                                            ) : null}
+                                                                                            <span className={styles.clientCotizItemQty}>{m.qty}</span>
+                                                                                            <span className={styles.clientCotizItemName} style={{
+                                                                                                textDecoration: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? 'line-through' : 'none',
+                                                                                                color: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? '#94a3b8' : 'inherit'
+                                                                                            }}>
+                                                                                                {m.name}
+                                                                                                {isApproved && acceptedStored && !isItemAccepted && <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px', fontStyle: 'italic' }}>(No contratado)</span>}
+                                                                                            </span>
+                                                                                            <span className={styles.clientCotizItemPrice} style={{
+                                                                                                textDecoration: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? 'line-through' : 'none',
+                                                                                                color: (!isChecked && isPending) || (isApproved && acceptedStored && !isItemAccepted) ? '#94a3b8' : '#059669'
+                                                                                            }}>
+                                                                                                {m.price}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
                                                                             </div>
                                                                         </div>
 
                                                                         <div className={styles.clientCotizTotalRow}>
-                                                                            <span className={styles.clientCotizTotalLabel}>⚡ Monto Total</span>
-                                                                            <span className={styles.clientCotizTotalValue}>${Number(cotiz.monto).toLocaleString('es-MX')}</span>
+                                                                            <span className={styles.clientCotizTotalLabel}>⚡ {isPending && hasItems ? 'Monto Seleccionado' : 'Monto Total'}</span>
+                                                                            <span className={styles.clientCotizTotalValue}>${displayTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                                         </div>
 
                                                                         <button
@@ -7356,8 +7555,20 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                         {isPending && (
                                                                             <div className={styles.clientCotizActions}>
-                                                                                <button className={styles.clientCotizBtnAccept} onClick={() => handleClienteAceptarCotizacion(cotiz.id!)}>
-                                                                                    <HiOutlineCheckCircle size={20} /> Aceptar Propuesta
+                                                                                <button
+                                                                                    className={styles.clientCotizBtnAccept}
+                                                                                    disabled={hasItems && acceptedItemsList.length === 0}
+                                                                                    style={{
+                                                                                        opacity: hasItems && acceptedItemsList.length === 0 ? 0.6 : 1,
+                                                                                        cursor: hasItems && acceptedItemsList.length === 0 ? 'not-allowed' : 'pointer'
+                                                                                    }}
+                                                                                    onClick={() => handleClienteAceptarCotizacion(cotiz.id!, acceptedItemsList, displayTotal)}
+                                                                                >
+                                                                                    <HiOutlineCheckCircle size={20} />
+                                                                                    {hasItems && acceptedItemsList.length === 0
+                                                                                        ? 'Selecciona al menos 1 servicio'
+                                                                                        : `Aceptar Servicios Seleccionados ($${displayTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                                                                                    }
                                                                                 </button>
                                                                                 <button className={styles.clientCotizBtnRecotizar} onClick={() => { setCotizParaRecotizar(cotiz.id!); setShowRecotizModal(true); }}>
                                                                                     🔁 Re-Cotizar
@@ -12044,6 +12255,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
             {previewQuote && trabajo && (() => {
                 const { materials, manoObra, notes } = parseQuoteMaterials(previewQuote.descripcion || "");
+                let quoteAcceptedItems: any[] | undefined = undefined;
+                try {
+                    const raw = localStorage.getItem(`quote_accepted_items_${previewQuote.id}`) || localStorage.getItem(`quote_accepted_items_${trabajo.id}`);
+                    if (raw) quoteAcceptedItems = JSON.parse(raw);
+                } catch {}
                 return (
                     <CotizacionPDFPreview
                         trabajo={trabajo}
@@ -12052,6 +12268,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         notas={notes}
                         materials={materials}
                         manoObra={manoObra}
+                        acceptedItems={quoteAcceptedItems}
                         onClose={() => setPreviewQuote(null)}
                     />
                 );

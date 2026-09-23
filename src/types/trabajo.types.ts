@@ -1,4 +1,13 @@
-// Tipos compartidos para Trabajos / Solicitudes
+export interface CotizacionItem {
+    id?: string;
+    tipo: 'concepto' | 'material' | 'servicio';
+    nombre: string;
+    cantidad: number;
+    precio_unitario: number;
+    subtotal: number;
+    seleccionado: boolean;
+    estado?: 'Aceptado' | 'Rechazado' | 'Pendiente';
+}
 
 export interface Trabajo {
     id: number;
@@ -18,6 +27,9 @@ export interface Trabajo {
         notas: string;
         archivo: string;
         fecha: string;
+        items?: CotizacionItem[];
+        items_aceptados?: CotizacionItem[];
+        monto_original?: string;
     };
     isEmergency?: boolean;
     asignaciones?: AsignacionTecnico[];

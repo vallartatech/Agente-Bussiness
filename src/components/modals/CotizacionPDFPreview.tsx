@@ -4,7 +4,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { getDiagnosticCategories, parseWorkItems } from './ReportePDFPreview';
 
-export default function CotizacionPDFPreview({ trabajo, subTareas, costo, notas, materials = [], manoObra = 0, onClose }: any) {
+export default function CotizacionPDFPreview({ trabajo, subTareas, costo, notas, materials = [], manoObra = 0, acceptedItems, onClose }: any) {
     const pdfRef = useRef<HTMLDivElement>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
@@ -231,7 +231,27 @@ export default function CotizacionPDFPreview({ trabajo, subTareas, costo, notas,
                             </tr>
                         </thead>
                         <tbody>
-                            {materials.length > 0 ? (
+                            {acceptedItems && acceptedItems.length > 0 ? (
+                                acceptedItems.map((item: any, idx: number) => {
+                                    const qty = parseFloat(String(item.cantidad || '1').replace(/[^0-9.]/g, '')) || 1;
+                                    const price = parseFloat(item.precio) || 0;
+                                    const total = qty * price;
+                                    return (
+                                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? '#f8fafc' : '#fff' }}>
+                                            <td style={{ padding: '8px 12px', fontWeight: 'bold' }}>{idx + 1}</td>
+                                            <td style={{ padding: '8px 12px', textTransform: 'uppercase' }}>
+                                                <span style={{ fontSize: '10px', background: item.tipo === 'concepto' ? '#e0f2fe' : '#fef3c7', color: item.tipo === 'concepto' ? '#0369a1' : '#b45309', padding: '2px 6px', borderRadius: '4px', marginRight: '6px', fontWeight: 'bold' }}>
+                                                    {item.tipo === 'concepto' ? 'SERVICIO' : 'MATERIAL'}
+                                                </span>
+                                                {item.nombre}
+                                            </td>
+                                            <td style={{ padding: '8px 12px', textAlign: 'center' }}>{qty}</td>
+                                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>${price.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>${total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    );
+                                })
+                            ) : materials.length > 0 ? (
                                 <>
                                     {materials.map((m: any, idx: number) => {
                                         const qty = parseFloat(m.piezas) || 1;
