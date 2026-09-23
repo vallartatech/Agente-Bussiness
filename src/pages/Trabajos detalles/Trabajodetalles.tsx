@@ -603,9 +603,12 @@ const TrabajoDetalle: React.FC = () => {
                         const isMant = (gJob as any).isMantenimiento || String(gJob.id).startsWith('m-');
                         if (isMant) {
                             const rawId = (gJob as any).original_id || String(gJob.id).replace('m-', '');
-                            try { await deleteMantenimientoSolicitud(rawId); } catch (e) { console.error(e); }
+                            try { await deleteMantenimientoSolicitud(rawId); } catch (e) { console.warn(e); }
+                            const stored = JSON.parse(localStorage.getItem('deleted_maintenance_ids') || '[]');
+                            if (!stored.includes(String(rawId))) stored.push(String(rawId));
+                            localStorage.setItem('deleted_maintenance_ids', JSON.stringify(stored));
                         } else {
-                            try { await deleteTrabajo(Number((gJob as any).original_id || gJob.id)); } catch (e) { console.error(e); }
+                            try { await deleteTrabajo(Number((gJob as any).original_id || gJob.id)); } catch (e) { console.warn(e); }
                         }
                     }
                     const updated = trabajosData.filter(t => getGroupId(t.descripcion) !== grpId);
@@ -614,13 +617,17 @@ const TrabajoDetalle: React.FC = () => {
                     const isMant = (job as any).isMantenimiento || String(job.id).startsWith('m-');
                     if (isMant) {
                         const rawId = (job as any).original_id || String(job.id).replace('m-', '');
-                        await deleteMantenimientoSolicitud(rawId);
+                        try { await deleteMantenimientoSolicitud(rawId); } catch (e) { console.warn(e); }
+                        const stored = JSON.parse(localStorage.getItem('deleted_maintenance_ids') || '[]');
+                        if (!stored.includes(String(rawId))) stored.push(String(rawId));
+                        localStorage.setItem('deleted_maintenance_ids', JSON.stringify(stored));
                     } else {
                         await deleteTrabajo(Number((job as any).original_id || job.id));
                     }
                     saveJobs(trabajosData.filter(t => t.id !== job.id));
                 }
                 showAlert("Éxito", grpId ? "Grupo de solicitudes borrado exitosamente." : "Solicitud borrada exitosamente.", "success");
+                reloadTrabajosList();
             } catch (error) {
                 console.error("Error al borrar solicitud:", error);
                 showAlert("Error", "No se pudo borrar la solicitud.", "error");
@@ -722,7 +729,14 @@ const TrabajoDetalle: React.FC = () => {
                 if (!finalGroupId && modalFormServices.length > 1) finalGroupId = "REQ-" + Date.now();
 
                 for (const delId of modalDeletedDbIds) {
-                    try { await deleteTrabajo(delId); } catch (e) { console.error("Error deleting job in group edit:", e); }
+                    if (String(delId).startsWith('m-')) {
+                        const rawId = String(delId).replace('m-', '');
+                        const stored = JSON.parse(localStorage.getItem('deleted_maintenance_ids') || '[]');
+                        if (!stored.includes(String(rawId))) stored.push(String(rawId));
+                        localStorage.setItem('deleted_maintenance_ids', JSON.stringify(stored));
+                    } else {
+                        try { await deleteTrabajo(delId); } catch (e) { console.error("Error deleting job in group edit:", e); }
+                    }
                 }
 
                 const isEmergency = isSOSRequest;
@@ -745,13 +759,19 @@ const TrabajoDetalle: React.FC = () => {
                     }
 
                     const descWithGroup = finalGroupId ? `[Grupo: ${finalGroupId}]\n${svcDesc}` : svcDesc;
-                    if (svc.dbId) {
-                        await updateTrabajo(svc.dbId, {
+                    if (svc.dbId && !String(svc.dbId).startsWith('m-')) {
+                        await updateTrabajo(Number(svc.dbId), {
                             titulo: isEmergency ? `🚨 SOS: ${finalCat} - ${businessName}` : `${finalCat} - ${modalNewRequestData.cliente || businessName}`,
                             descripcion: descWithGroup,
                             fecha_programada: modalNewRequestData.fecha || null
                         });
                     } else {
+                        if (svc.dbId && String(svc.dbId).startsWith('m-')) {
+                            const rawId = String(svc.dbId).replace('m-', '');
+                            const stored = JSON.parse(localStorage.getItem('deleted_maintenance_ids') || '[]');
+                            if (!stored.includes(String(rawId))) stored.push(String(rawId));
+                            localStorage.setItem('deleted_maintenance_ids', JSON.stringify(stored));
+                        }
                         await createTrabajo({
                             titulo: isEmergency ? `🚨 SOS: ${finalCat} - ${businessName}` : `${finalCat} - ${modalNewRequestData.cliente || businessName}`,
                             descripcion: descWithGroup,

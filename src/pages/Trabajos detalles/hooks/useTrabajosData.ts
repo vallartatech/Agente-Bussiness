@@ -167,7 +167,10 @@ export const useTrabajosData = (
         // 2. Obtener solicitudes de mantenimiento
         try {
             const mantenimientos = await getMantenimientoSolicitudes(Number(id));
-            mappedMantenimientos = mantenimientos.map((m: any) => {
+            const deletedMantIds = JSON.parse(localStorage.getItem('deleted_maintenance_ids') || '[]');
+            mappedMantenimientos = mantenimientos
+                .filter((m: any) => !deletedMantIds.includes(String(m.id)) && !deletedMantIds.includes(Number(m.id)))
+                .map((m: any) => {
                 let estado = m.estado;
                 if (estado === 'Pendiente') estado = 'Solicitud';
 
