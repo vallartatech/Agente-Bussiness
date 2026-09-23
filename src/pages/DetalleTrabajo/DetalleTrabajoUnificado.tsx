@@ -8159,18 +8159,96 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                         Elaboración de Propuestas ({cotizacionesFormItems.length})
                                                                     </h3>
                                                                 </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setCotizacionesFormItems([
-                                                                            ...cotizacionesFormItems,
-                                                                            { id: `item_${Date.now()}`, manoObra: '0', materials: [{ material: '', piezas: '', precio: '' }], notas: '', minimized: false }
-                                                                        ]);
-                                                                    }}
-                                                                    style={{ background: '#fff7ed', color: '#f26522', border: '1px solid #fed7aa', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                                >
-                                                                    + Nueva Propuesta
-                                                                </button>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                    {subTareas.some(t => t.quoteData || t.esCotizacion) && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const techTask = subTareas.find(t => t.quoteData || t.esCotizacion);
+                                                                                if (techTask) {
+                                                                                    const qData = techTask.quoteData;
+                                                                                    const mapped: CotizacionFormItem[] = [];
+                                                                                    if (qData?.itemsQuote && qData.itemsQuote.length > 0) {
+                                                                                        qData.itemsQuote.forEach((it: any, idx: number) => {
+                                                                                            const cTotal = (it.conceptos || []).reduce((sum: number, c: any) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
+                                                                                            const mats = (it.materiales || []).length > 0
+                                                                                                ? it.materiales.map((m: any) => ({ material: m.nombre || m.material || '', piezas: String(m.cantidad || m.piezas || '1'), precio: String(m.precio || '0') }))
+                                                                                                : [{ material: '', piezas: '', precio: '' }];
+                                                                                            mapped.push({
+                                                                                                id: `item_${idx + 1}_${Date.now()}`,
+                                                                                                titulo: it.descripcion || `Punto ${idx + 1}`,
+                                                                                                manoObra: cTotal > 0 ? String(cTotal) : '0',
+                                                                                                materials: mats,
+                                                                                                notas: idx === 0 ? (techTask.cotizacionNotas || qData?.comentarios || '') : '',
+                                                                                                minimized: false
+                                                                                            });
+                                                                                        });
+                                                                                    } else if (qData?.conceptos && qData.conceptos.length > 0) {
+                                                                                        const puntosMap: Record<number, { conceptos: any[], materiales: any[] }> = {};
+                                                                                        (qData.conceptos || []).forEach((c: any) => {
+                                                                                            const pIdx = c.puntoIndex || 1;
+                                                                                            if (!puntosMap[pIdx]) puntosMap[pIdx] = { conceptos: [], materiales: [] };
+                                                                                            puntosMap[pIdx].conceptos.push(c);
+                                                                                        });
+                                                                                        (qData.materiales || []).forEach((m: any) => {
+                                                                                            const pIdx = m.puntoIndex || 1;
+                                                                                            if (!puntosMap[pIdx]) puntosMap[pIdx] = { conceptos: [], materiales: [] };
+                                                                                            puntosMap[pIdx].materiales.push(m);
+                                                                                        });
+                                                                                        const pKeys = Object.keys(puntosMap).map(Number).sort((a, b) => a - b);
+                                                                                        pKeys.forEach((pIdx, idx) => {
+                                                                                            const grp = puntosMap[pIdx];
+                                                                                            const cTotal = grp.conceptos.reduce((sum, c) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
+                                                                                            const pTitle = grp.conceptos[0]?.descripcion || `Punto ${pIdx}`;
+                                                                                            const mats = grp.materiales.length > 0
+                                                                                                ? grp.materiales.map(m => ({ material: m.nombre || m.material || '', piezas: String(m.cantidad || m.piezas || '1'), precio: String(m.precio || '0') }))
+                                                                                                : [{ material: '', piezas: '', precio: '' }];
+                                                                                            mapped.push({
+                                                                                                id: `item_${idx + 1}_${Date.now()}`,
+                                                                                                titulo: pTitle,
+                                                                                                manoObra: cTotal > 0 ? String(cTotal) : '0',
+                                                                                                materials: mats,
+                                                                                                notas: idx === 0 ? (techTask.cotizacionNotas || qData?.comentarios || '') : '',
+                                                                                                minimized: false
+                                                                                            });
+                                                                                        });
+                                                                                    } else {
+                                                                                        const mats = (techTask.refacciones || []).length > 0
+                                                                                            ? techTask.refacciones.map((r: any) => ({ material: r.pieza || '', piezas: String(r.cantidad || '1'), precio: String(r.costo_estimado || '0') }))
+                                                                                            : [{ material: '', piezas: '', precio: '' }];
+                                                                                        mapped.push({
+                                                                                            id: `item_1_${Date.now()}`,
+                                                                                            titulo: techTask.titulo || trabajo?.titulo || 'Servicio Técnico',
+                                                                                            manoObra: String(techTask.cotizacionMonto || '0').replace(/[^0-9.]/g, ''),
+                                                                                            materials: mats,
+                                                                                            notas: techTask.cotizacionNotas || '',
+                                                                                            minimized: false
+                                                                                        });
+                                                                                    }
+                                                                                    if (mapped.length > 0) {
+                                                                                        setCotizacionesFormItems(mapped);
+                                                                                        showAlert('Datos Importados', 'Se han cargado los puntos y montos del técnico en el formulario de propuestas.', 'success');
+                                                                                    }
+                                                                                }
+                                                                            }}
+                                                                            style={{ background: '#f0fdf4', color: '#16a34a', border: '1.5px solid #86efac', padding: '8px 14px', borderRadius: '10px', fontSize: '12.5px', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                                                                        >
+                                                                            📥 Importar Cotización del Técnico
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setCotizacionesFormItems([
+                                                                                ...cotizacionesFormItems,
+                                                                                { id: `item_${Date.now()}`, titulo: '', manoObra: '0', materials: [{ material: '', piezas: '', precio: '' }], notas: '', minimized: false }
+                                                                            ]);
+                                                                        }}
+                                                                        style={{ background: '#fff7ed', color: '#f26522', border: '1px solid #fed7aa', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s' }}
+                                                                    >
+                                                                        + Nueva Propuesta
+                                                                    </button>
+                                                                </div>
                                                             </div>
 
                                                             <div className={styles.cardTransparentScroll} style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '20px', maxHeight: '520px', width: '100%', boxSizing: 'border-box' }}>
@@ -8847,7 +8925,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 })() && (
                                                                                                         <>
                                                                                                             <button
-                                                                                                                onClick={async () => {
+                                                                                                                                                onClick={async () => {
                                                                                                                     try {
                                                                                                                         const targetTechName = tarea.tecnicoNombre || trabajo?.tecnico || subTareas[0]?.tecnicoNombre || 'Jesus Escalante';
                                                                                                                         const targetTrabajadorId = tarea.trabajadorId || tarea.trabajador_id || trabajo?.trabajador_id || (trabajo as any)?.trabajador?.id || 1;
@@ -8869,6 +8947,83 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                                 }
                                                                                                                             }
                                                                                                                             setCotizaciones(prev => prev.map(c => ({ ...c, estado: 'Aprobada' as const })));
+                                                                                                                        }
+
+                                                                                                                        // 📥 IMPORTAR DATOS DE LA COTIZACIÓN DEL TÉCNICO A "ELABORACIÓN DE PROPUESTAS"
+                                                                                                                        const mappedProposals: CotizacionFormItem[] = [];
+                                                                                                                        const qData = tarea.quoteData;
+
+                                                                                                                        if (qData?.itemsQuote && qData.itemsQuote.length > 0) {
+                                                                                                                            qData.itemsQuote.forEach((it: any, idx: number) => {
+                                                                                                                                const cTotal = (it.conceptos || []).reduce((sum: number, c: any) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
+                                                                                                                                const mats = (it.materiales || []).length > 0
+                                                                                                                                    ? it.materiales.map((m: any) => ({ material: m.nombre || m.material || '', piezas: String(m.cantidad || m.piezas || '1'), precio: String(m.precio || '0') }))
+                                                                                                                                    : [{ material: '', piezas: '', precio: '' }];
+                                                                                                                                
+                                                                                                                                let pTitle = it.descripcion || '';
+                                                                                                                                if (!pTitle && it.conceptos && it.conceptos[0]?.descripcion) {
+                                                                                                                                    pTitle = it.conceptos[0].descripcion;
+                                                                                                                                }
+                                                                                                                                if (!pTitle) {
+                                                                                                                                    pTitle = `Punto ${idx + 1}: ${it.tipo || 'Servicio'}`;
+                                                                                                                                }
+
+                                                                                                                                mappedProposals.push({
+                                                                                                                                    id: `item_${idx + 1}_${Date.now()}`,
+                                                                                                                                    titulo: pTitle,
+                                                                                                                                    manoObra: cTotal > 0 ? String(cTotal) : '0',
+                                                                                                                                    materials: mats,
+                                                                                                                                    notas: idx === 0 ? (tarea.cotizacionNotas || qData?.comentarios || '') : '',
+                                                                                                                                    minimized: false
+                                                                                                                                });
+                                                                                                                            });
+                                                                                                                        } else if (qData?.conceptos && qData.conceptos.length > 0) {
+                                                                                                                            const puntosMap: Record<number, { conceptos: any[], materiales: any[] }> = {};
+                                                                                                                            (qData.conceptos || []).forEach((c: any) => {
+                                                                                                                                const pIdx = c.puntoIndex || 1;
+                                                                                                                                if (!puntosMap[pIdx]) puntosMap[pIdx] = { conceptos: [], materiales: [] };
+                                                                                                                                puntosMap[pIdx].conceptos.push(c);
+                                                                                                                            });
+                                                                                                                            (qData.materiales || []).forEach((m: any) => {
+                                                                                                                                const pIdx = m.puntoIndex || 1;
+                                                                                                                                if (!puntosMap[pIdx]) puntosMap[pIdx] = { conceptos: [], materiales: [] };
+                                                                                                                                puntosMap[pIdx].materiales.push(m);
+                                                                                                                            });
+
+                                                                                                                            const pKeys = Object.keys(puntosMap).map(Number).sort((a, b) => a - b);
+                                                                                                                            pKeys.forEach((pIdx, idx) => {
+                                                                                                                                const grp = puntosMap[pIdx];
+                                                                                                                                const cTotal = grp.conceptos.reduce((sum, c) => sum + ((Number(c.cantidad) || 1) * (parseFloat(c.precio) || 0)), 0);
+                                                                                                                                const pTitle = grp.conceptos[0]?.descripcion || `Punto ${pIdx}`;
+                                                                                                                                const mats = grp.materiales.length > 0
+                                                                                                                                    ? grp.materiales.map(m => ({ material: m.nombre || m.material || '', piezas: String(m.cantidad || m.piezas || '1'), precio: String(m.precio || '0') }))
+                                                                                                                                    : [{ material: '', piezas: '', precio: '' }];
+                                                                                                                                
+                                                                                                                                mappedProposals.push({
+                                                                                                                                    id: `item_${idx + 1}_${Date.now()}`,
+                                                                                                                                    titulo: pTitle,
+                                                                                                                                    manoObra: cTotal > 0 ? String(cTotal) : '0',
+                                                                                                                                    materials: mats,
+                                                                                                                                    notas: idx === 0 ? (tarea.cotizacionNotas || qData?.comentarios || '') : '',
+                                                                                                                                    minimized: false
+                                                                                                                                });
+                                                                                                                            });
+                                                                                                                        } else {
+                                                                                                                            const mats = (tarea.refacciones || []).length > 0
+                                                                                                                                ? tarea.refacciones.map((r: any) => ({ material: r.pieza || '', piezas: String(r.cantidad || '1'), precio: String(r.costo_estimado || '0') }))
+                                                                                                                                : [{ material: '', piezas: '', precio: '' }];
+                                                                                                                            mappedProposals.push({
+                                                                                                                                id: `item_1_${Date.now()}`,
+                                                                                                                                titulo: tarea.titulo || trabajo?.titulo || 'Servicio Técnico',
+                                                                                                                                manoObra: String(showMonto || '0').replace(/[^0-9.]/g, ''),
+                                                                                                                                materials: mats,
+                                                                                                                                notas: tarea.cotizacionNotas || '',
+                                                                                                                                minimized: false
+                                                                                                                            });
+                                                                                                                        }
+
+                                                                                                                        if (mappedProposals.length > 0) {
+                                                                                                                            setCotizacionesFormItems(mappedProposals);
                                                                                                                         }
 
                                                                                                                         // Notificar al técnico autónomo con enlace directo a la pestaña de Trabajo
@@ -8905,7 +9060,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                             setActiveTab('Datos');
                                                                                                                         }
 
-                                                                                                                        showAlert('Cotización Aceptada', `Has aceptado la cotización de ${targetTechName} por $${showMonto}. Se le asignó el trabajo y se le solicitó definir su día y hora de ejecución.`, 'success');
+                                                                                                                        showAlert('Cotización Aceptada', `Has aceptado la cotización de ${targetTechName}. Los conceptos, montos y materiales se importaron a "Elaboración de Propuestas" para que formules la cotización final al cliente.`, 'success');
                                                                                                                     } catch (error) {
                                                                                                                         showAlert('Error', 'Hubo un problema al actualizar el estado del trabajo.', 'error');
                                                                                                                     }
