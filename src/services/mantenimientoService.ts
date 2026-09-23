@@ -56,7 +56,13 @@ export const cancelarMantenimientoAsignacion = async (id: string | number) => {
     return res.data;
 };
 
+export const deleteMantenimientoSolicitud = async (id: number | string) => {
+    const res = await api.delete(`/mantenimiento-solicitudes/${id}`);
+    return res.data;
+};
+
 export const getConsumoReporte = async () => {
     const res = await api.get('/equipos-consumo');
     return res.data;
 };
+

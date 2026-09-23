@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createTrabajo, getTrabajos, updateEstadoTrabajo, assignTrabajador, updateTrabajo, deleteTrabajo, getTrabajo } from "../../services/trabajosService";
-import { createMantenimientoSolicitud } from "../../services/mantenimientoService";
+import { createMantenimientoSolicitud, deleteMantenimientoSolicitud } from "../../services/mantenimientoService";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import menuStyles from "../../components/Menu.module.css";
 import styles from "./Trabajodetalles.module.css";
@@ -600,12 +600,24 @@ const TrabajoDetalle: React.FC = () => {
                         return tGrpId === grpId;
                     });
                     for (const gJob of groupJobs) {
-                        await deleteTrabajo(Number((gJob as any).original_id || gJob.id));
+                        const isMant = (gJob as any).isMantenimiento || String(gJob.id).startsWith('m-');
+                        if (isMant) {
+                            const rawId = (gJob as any).original_id || String(gJob.id).replace('m-', '');
+                            try { await deleteMantenimientoSolicitud(rawId); } catch (e) { console.error(e); }
+                        } else {
+                            try { await deleteTrabajo(Number((gJob as any).original_id || gJob.id)); } catch (e) { console.error(e); }
+                        }
                     }
                     const updated = trabajosData.filter(t => getGroupId(t.descripcion) !== grpId);
                     saveJobs(updated);
                 } else {
-                    await deleteTrabajo(Number((job as any).original_id || job.id));
+                    const isMant = (job as any).isMantenimiento || String(job.id).startsWith('m-');
+                    if (isMant) {
+                        const rawId = (job as any).original_id || String(job.id).replace('m-', '');
+                        await deleteMantenimientoSolicitud(rawId);
+                    } else {
+                        await deleteTrabajo(Number((job as any).original_id || job.id));
+                    }
                     saveJobs(trabajosData.filter(t => t.id !== job.id));
                 }
                 showAlert("Éxito", grpId ? "Grupo de solicitudes borrado exitosamente." : "Solicitud borrada exitosamente.", "success");
