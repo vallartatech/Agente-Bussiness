@@ -39,6 +39,7 @@ import { getReporteByTrabajoId } from "../../services/reportesService";
 import LevantamientoFlotaMockup from "../../components/LevantamientoFlotaMockup";
 import AreaVisualGrid from '../../components/AreaVisualGrid';
 import ModalSeleccionEspacio from '../../components/ModalSeleccionEspacio';
+import { isIntervencionForEquipo } from "../admin/EquiposNegocio";
 
 export interface PerfilEmpresaConfig {
     isAutonomo?: boolean;
@@ -92,6 +93,10 @@ export interface BusinessData {
     telefonoGerente?: string;
     subgerente?: string;
     telefonoSubgerente?: string;
+    apellidosGerente?: string;
+    correo?: string;
+    latitud?: string | number;
+    longitud?: string | number;
     calle?: string;
     numero?: string;
     colonia?: string;
@@ -134,7 +139,7 @@ const PerfilEmpresaUnificado: React.FC<{ config: PerfilEmpresaConfig }> = ({ con
     });
 
     const [isLevantamientoModalOpen, setIsLevantamientoModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'levantamiento'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'levantamiento' | 'flota'>('info');
     const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
     const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -353,7 +358,7 @@ const PerfilEmpresaUnificado: React.FC<{ config: PerfilEmpresaConfig }> = ({ con
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const bannerInputRef = React.useRef<HTMLInputElement>(null);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         if (!canEdit) return;
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -695,9 +700,8 @@ const PerfilEmpresaUnificado: React.FC<{ config: PerfilEmpresaConfig }> = ({ con
                 });
                 setFormData(prev => ({ ...prev, levantamiento: updated }));
                 try {
-                    await deleteEquipo(eqId);
-                    showAlert("Eliminado", "Equipo eliminado correctamente", "success");
                     await persistLevantamiento(updated);
+                    showAlert("Eliminado", "Equipo eliminado correctamente", "success");
                 } catch (err) {
                     console.error("Error al borrar equipo:", err);
                     showAlert("Error", "No se pudo eliminar el equipo en la base de datos", "error");
@@ -1409,7 +1413,7 @@ const PerfilEmpresaUnificado: React.FC<{ config: PerfilEmpresaConfig }> = ({ con
                     isOpen={bitacoraModalOpen}
                     onClose={() => setBitacoraModalOpen(false)}
                     equipo={selectedEqForBitacora}
-                    historial={selectedEqForBitacora ? allSolicitudes.filter(sol => String(sol.levantamiento_equipo_id) === String(selectedEqForBitacora.id)) : []}
+                    historial={selectedEqForBitacora ? allSolicitudes.filter(sol => isIntervencionForEquipo(sol, selectedEqForBitacora)) : []}
                     onViewReport={(trabajoId) => {
                         setSelectedTrabajoId(trabajoId);
                         setReporteModalOpen(true);

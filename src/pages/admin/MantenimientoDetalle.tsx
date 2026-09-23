@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
     getMantenimientoSolicitud, 
+    getMantenimientoSolicitudes,
     asignarMantenimientoVisita, 
     asignarMantenimientoReparacion,
     actualizarMantenimientoAsignacion,
@@ -15,6 +16,7 @@ import { useModal } from "../../context/ModalContext";
 import { normalizeRole } from "../../utils/roles";
 import HistorialEquipoModal from "../../components/modals/HistorialEquipoModal";
 import DetalleReporteModal from "../../components/modals/DetalleReporteModal";
+import { getMergedIntervenciones } from "./EquiposNegocio";
 
 import styles from "./MantenimientoDetalle.module.css";
 import { 
@@ -89,12 +91,12 @@ const MantenimientoDetalle = () => {
                     const eq = sol.equipo || sol.levantamiento_equipo;
                     if (eq) {
                         try {
-                            const allJobs = await getTrabajos();
-                            const eqJobs = allJobs.filter((job: any) => 
-                                String(job.levantamiento_equipo_id) === String(eq.id) ||
-                                String(job.levantamiento_equipo?.id) === String(eq.id)
-                            );
-                            setHistorial(eqJobs);
+                            const [allJobs, allMantenimientos] = await Promise.all([
+                                getTrabajos(),
+                                getMantenimientoSolicitudes(negId ? Number(negId) : undefined)
+                            ]);
+                            const intervenciones = getMergedIntervenciones(eq, allMantenimientos, allJobs);
+                            setHistorial(intervenciones);
                         } catch (errJobs) {
                             console.error("Error al obtener historial de trabajos:", errJobs);
                         }

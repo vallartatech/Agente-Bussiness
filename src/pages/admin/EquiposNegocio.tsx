@@ -46,7 +46,7 @@ export const isIntervencionForEquipo = (item: any, equipo: any): boolean => {
     if (!item || !equipo) return false;
 
     // 1. Coincidencia directa de ID numérico/string
-    const eqId = String(equipo.id || '');
+    const eqId = String(equipo.id || equipo.levantamiento_equipo_id || '');
     if (eqId) {
         if (item.levantamiento_equipo_id && String(item.levantamiento_equipo_id) === eqId) return true;
         if (item.levantamiento_equipo?.id && String(item.levantamiento_equipo.id) === eqId) return true;
@@ -54,50 +54,65 @@ export const isIntervencionForEquipo = (item: any, equipo: any): boolean => {
         if (item.equipo?.id && String(item.equipo.id) === eqId) return true;
     }
 
-    // 2. Coincidencia por datos estructurados de equipo (equipoInfo, equipo, levantamiento_equipo)
+    // 2. Coincidencia directa por Número de Serie si existe
+    const eqSerie = String(equipo.serie || equipo.numero_serie || '').trim().toLowerCase();
+    if (eqSerie && eqSerie !== 'n/a' && eqSerie !== 's/n' && eqSerie !== 'sin serie' && eqSerie !== 'undefined' && eqSerie !== 'null') {
+        const itemSerie = String(
+            item.serie || 
+            item.numero_serie || 
+            item.equipo?.serie || 
+            item.levantamiento_equipo?.serie || 
+            item.equipoInfo?.serie || 
+            ''
+        ).trim().toLowerCase();
+        if (itemSerie && itemSerie === eqSerie) return true;
+    }
+
+    // 3. Coincidencia por datos estructurados de equipo (equipoInfo, equipo, levantamiento_equipo)
     const itemEq = item.equipoInfo || item.equipo || item.levantamiento_equipo;
     if (itemEq) {
-        const matchMarca = itemEq.marca && equipo.marca && itemEq.marca.trim().toLowerCase() === equipo.marca.trim().toLowerCase();
-        const matchModelo = itemEq.modelo && equipo.modelo && itemEq.modelo.trim().toLowerCase() === equipo.modelo.trim().toLowerCase();
-        const matchNombre = itemEq.nombre && equipo.nombre && itemEq.nombre.trim().toLowerCase() === equipo.nombre.trim().toLowerCase();
+        const matchMarca = itemEq.marca && equipo.marca && String(itemEq.marca).trim().toLowerCase() === String(equipo.marca).trim().toLowerCase();
+        const matchModelo = itemEq.modelo && equipo.modelo && String(itemEq.modelo).trim().toLowerCase() === String(equipo.modelo).trim().toLowerCase();
+        const matchNombre = itemEq.nombre && equipo.nombre && String(itemEq.nombre).trim().toLowerCase() === String(equipo.nombre).trim().toLowerCase();
+        const matchSerie = itemEq.serie && equipo.serie && String(itemEq.serie).trim().toLowerCase() === String(equipo.serie).trim().toLowerCase();
+        if (matchSerie && matchSerie.length > 2) return true;
         if (matchMarca && (matchModelo || matchNombre)) return true;
         if (matchNombre && matchModelo) return true;
     }
 
-    // 3. Revisar en reporte/solución parseada si contiene equipoInfo
+    // 4. Revisar en reporte/solución parseada si contiene equipoInfo
     const repSol = item.reporte?.solucion || item.solucion;
     if (repSol) {
         try {
             const parsed = typeof repSol === 'string' ? JSON.parse(repSol) : repSol;
             if (parsed.equipoInfo) {
                 const eqInfo = parsed.equipoInfo;
-                const mMarca = eqInfo.marca && equipo.marca && eqInfo.marca.trim().toLowerCase() === equipo.marca.trim().toLowerCase();
-                const mModelo = eqInfo.modelo && equipo.modelo && eqInfo.modelo.trim().toLowerCase() === equipo.modelo.trim().toLowerCase();
-                const mNombre = eqInfo.nombre && equipo.nombre && eqInfo.nombre.trim().toLowerCase() === equipo.nombre.trim().toLowerCase();
+                const mMarca = eqInfo.marca && equipo.marca && String(eqInfo.marca).trim().toLowerCase() === String(equipo.marca).trim().toLowerCase();
+                const mModelo = eqInfo.modelo && equipo.modelo && String(eqInfo.modelo).trim().toLowerCase() === String(equipo.modelo).trim().toLowerCase();
+                const mNombre = eqInfo.nombre && equipo.nombre && String(eqInfo.nombre).trim().toLowerCase() === String(equipo.nombre).trim().toLowerCase();
+                const mSerie = eqInfo.serie && equipo.serie && String(eqInfo.serie).trim().toLowerCase() === String(equipo.serie).trim().toLowerCase();
+                if (mSerie && mSerie.length > 2) return true;
                 if (mMarca && (mModelo || mNombre)) return true;
                 if (mNombre && mModelo) return true;
             }
         } catch (_) {}
     }
 
-    // 4. Coincidencia semántica en título y descripción para trabajos de mantenimiento
-    const isMaint = item.tipo === 'Mantenimiento' || item.isMantenimiento || String(item.titulo || '').toLowerCase().includes('mantenimiento');
-    if (isMaint) {
-        const textToSearch = `${item.titulo || ''} ${item.descripcion || ''} ${item.descripcion_problema || ''}`.toLowerCase();
-        const marca = String(equipo.marca || '').trim().toLowerCase();
-        const modelo = String(equipo.modelo || '').trim().toLowerCase();
-        const nombre = String(equipo.nombre || '').trim().toLowerCase();
+    // 5. Coincidencia semántica en título y descripción
+    const textToSearch = `${item.titulo || ''} ${item.descripcion || ''} ${item.descripcion_problema || ''}`.toLowerCase();
+    const marca = String(equipo.marca || '').trim().toLowerCase();
+    const modelo = String(equipo.modelo || '').trim().toLowerCase();
+    const nombre = String(equipo.nombre || '').trim().toLowerCase();
 
-        const hasMarca = marca.length > 1 && textToSearch.includes(marca);
-        const hasModelo = modelo.length > 0 && textToSearch.includes(modelo);
-        const hasNombre = nombre.length > 1 && textToSearch.includes(nombre);
+    const hasMarca = marca.length > 1 && textToSearch.includes(marca);
+    const hasModelo = modelo.length > 0 && textToSearch.includes(modelo);
+    const hasNombre = nombre.length > 1 && textToSearch.includes(nombre);
 
-        if ((hasMarca && hasModelo) || (hasMarca && hasNombre) || (hasNombre && hasModelo)) {
-            return true;
-        }
-        if (hasNombre && textToSearch.includes('mantenimiento')) {
-            return true;
-        }
+    if ((hasMarca && hasModelo) || (hasMarca && hasNombre) || (hasNombre && hasModelo)) {
+        return true;
+    }
+    if (hasNombre && (textToSearch.includes('mantenimiento') || item.tipo === 'Mantenimiento' || item.isMantenimiento)) {
+        return true;
     }
 
     return false;
