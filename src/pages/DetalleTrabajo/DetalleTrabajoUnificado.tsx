@@ -1948,16 +1948,16 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     const [reassignReason, setReassignReason] = useState("");
     const [isSubmittingReassign, setIsSubmittingReassign] = useState(false);
 
-    // Recopilación unificada de todas las fotos de reporte / levantamiento del técnico
+    // Recopilación unificada y categorizada de todas las fotos de reporte / levantamiento del técnico
     const allTechReportPhotos = useMemo(() => {
-        const photos: { url: string; label: string }[] = [];
+        const photos: { url: string; label: string; category?: string }[] = [];
         const seen = new Set<string>();
 
-        const addPhoto = (url: string | undefined | null, label: string) => {
+        const addPhoto = (url: string | undefined | null, label: string, category = 'General') => {
             if (!url || typeof url !== 'string' || !url.trim() || url === '—' || url === 'null' || url === 'undefined') return;
             if (!seen.has(url)) {
                 seen.add(url);
-                photos.push({ url, label });
+                photos.push({ url, label, category });
             }
         };
 
@@ -1971,55 +1971,236 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             }
         })();
 
-        if (actualRep) {
-            if (actualRep.imagenes?.antes) addPhoto(actualRep.imagenes.antes, 'Antes');
-            if (actualRep.imagenes?.durante) addPhoto(actualRep.imagenes.durante, 'Durante');
-            if (actualRep.imagenes?.despues) addPhoto(actualRep.imagenes.despues, 'Después');
-            if (Array.isArray(actualRep.imagenesObservacion)) {
-                actualRep.imagenesObservacion.forEach((img: string, idx: number) => addPhoto(img, `Evidencia ${idx + 1}`));
-            } else if (actualRep.imagenObservacion) {
-                addPhoto(actualRep.imagenObservacion, 'Observación');
-            }
-            if (Array.isArray(actualRep.taskItems)) {
-                actualRep.taskItems.forEach((tIt: any, idx: number) => {
-                    if (tIt.foto) addPhoto(tIt.foto, `Punto ${idx + 1}`);
-                    if (Array.isArray(tIt.photos)) {
-                        tIt.photos.forEach((p: string, pIdx: number) => addPhoto(p, `Punto ${idx + 1} (${pIdx + 1})`));
-                    }
-                });
-            }
-        }
-
-        if (reporteFinal) {
-            if (reporteFinal.imagenes?.antes) addPhoto(reporteFinal.imagenes.antes, 'Antes');
-            if (reporteFinal.imagenes?.durante) addPhoto(reporteFinal.imagenes.durante, 'Durante');
-            if (reporteFinal.imagenes?.despues) addPhoto(reporteFinal.imagenes.despues, 'Después');
-            if (Array.isArray(reporteFinal.imagenesObservacion)) {
-                reporteFinal.imagenesObservacion.forEach((img: string, idx: number) => addPhoto(img, `Evidencia ${idx + 1}`));
-            }
-        }
-
-        if (Array.isArray(subTareas)) {
-            subTareas.forEach((st: any, idx: number) => {
-                if (Array.isArray(st.photos)) {
-                    st.photos.forEach((p: string, pIdx: number) => addPhoto(p, `${st.titulo || `Punto ${idx + 1}`} (${pIdx + 1})`));
+        // 1. Fotos de Puntos de Trabajo en taskItems o reporte
+        if (actualRep && Array.isArray(actualRep.taskItems)) {
+            actualRep.taskItems.forEach((tIt: any, idx: number) => {
+                const desc = tIt.descripcion ? `: ${tIt.descripcion}` : '';
+                if (tIt.foto) addPhoto(tIt.foto, `Punto ${idx + 1}${desc}`, `Punto ${idx + 1}`);
+                if (Array.isArray(tIt.photos)) {
+                    tIt.photos.forEach((p: string, pIdx: number) => addPhoto(p, `Punto ${idx + 1}${desc} (${pIdx + 1})`, `Punto ${idx + 1}`));
                 }
-                if (st.foto) addPhoto(st.foto, st.titulo || `Punto ${idx + 1}`);
             });
         }
 
         if (Array.isArray(taskItems)) {
             taskItems.forEach((tIt: any, idx: number) => {
-                if (tIt.foto) addPhoto(tIt.foto, `Punto ${idx + 1}`);
+                const desc = tIt.descripcion ? `: ${tIt.descripcion}` : '';
+                if (tIt.foto) addPhoto(tIt.foto, `Punto ${idx + 1}${desc}`, `Punto ${idx + 1}`);
             });
         }
 
+        if (Array.isArray(subTareas)) {
+            subTareas.forEach((st: any, idx: number) => {
+                const pTitle = st.cleanDescripcion || st.descripcion || '';
+                const cleanPTitle = pTitle.split('\n')[0].replace(/^\[Punto\s*\d+\]\s*/i, '').trim();
+                const desc = cleanPTitle ? `: ${cleanPTitle}` : '';
+                if (Array.isArray(st.photos)) {
+                    st.photos.forEach((p: string, pIdx: number) => addPhoto(p, `Punto ${idx + 1}${desc} (${pIdx + 1})`, `Punto ${idx + 1}`));
+                }
+                if (st.foto) addPhoto(st.foto, `Punto ${idx + 1}${desc}`, `Punto ${idx + 1}`);
+            });
+        }
+
+        // 2. Fotos de Antes / Durante / Después del Reporte
+        if (actualRep) {
+            if (actualRep.imagenes?.antes) addPhoto(actualRep.imagenes.antes, 'Antes del Servicio', 'Evidencia General');
+            if (actualRep.imagenes?.durante) addPhoto(actualRep.imagenes.durante, 'Durante el Servicio', 'Evidencia General');
+            if (actualRep.imagenes?.despues) addPhoto(actualRep.imagenes.despues, 'Después del Servicio', 'Evidencia General');
+            if (Array.isArray(actualRep.imagenesObservacion)) {
+                actualRep.imagenesObservacion.forEach((img: string, idx: number) => addPhoto(img, `Observación ${idx + 1}`, 'Observaciones'));
+            } else if (actualRep.imagenObservacion) {
+                addPhoto(actualRep.imagenObservacion, 'Observación', 'Observaciones');
+            }
+        }
+
+        if (reporteFinal) {
+            if (reporteFinal.imagenes?.antes) addPhoto(reporteFinal.imagenes.antes, 'Antes', 'Evidencia General');
+            if (reporteFinal.imagenes?.durante) addPhoto(reporteFinal.imagenes.durante, 'Durante', 'Evidencia General');
+            if (reporteFinal.imagenes?.despues) addPhoto(reporteFinal.imagenes.despues, 'Después', 'Evidencia General');
+            if (Array.isArray(reporteFinal.imagenesObservacion)) {
+                reporteFinal.imagenesObservacion.forEach((img: string, idx: number) => addPhoto(img, `Observación ${idx + 1}`, 'Observaciones'));
+            }
+        }
+
+        // 3. Foto de la Solicitud Inicial
         if (trabajo?.foto_url) {
-            addPhoto(trabajo.foto_url, 'Foto de Solicitud');
+            addPhoto(trabajo.foto_url, 'Foto de Solicitud Inicial', 'Solicitud');
         }
 
         return photos;
     }, [reporteFinal, trabajo, subTareas, taskItems]);
+
+    // Estructura de Puntos de Servicio Categorizados (unifica Punto, Foto, Conceptos, Materiales y Subtotal)
+    // Categorías registradas explícitamente por el técnico (Mantenimiento, Plomería, Electricidad, etc.)
+    const registeredTechCategories = useMemo(() => {
+        const cats = new Set<string>();
+
+        const normalizeCat = (c?: string) => {
+            if (!c || typeof c !== 'string') return;
+            const cl = c.trim().toLowerCase();
+            if (cl === 'mantenimiento') cats.add('🛠️ Mantenimiento');
+            else if (cl === 'plomeria' || cl === 'plomería') cats.add('🚰 Plomería');
+            else if (cl === 'electricidad') cats.add('⚡ Electricidad');
+            else if (cl === 'instalacion' || cl === 'instalación') cats.add('🏗️ Instalación');
+            else if (cl === 'albañileria' || cl === 'albañilería' || cl === 'obra civil' || cl === 'albanileria') cats.add('🧱 Albañilería / Obra Civil');
+            else if (cl === 'carpinteria' || cl === 'carpintería') cats.add('🪵 Carpintería');
+            else if (cl === 'pintura') cats.add('🎨 Pintura');
+            else if (cl.includes('aire') || cl.includes('clima') || cl.includes('refrigeracion') || cl.includes('refrigeración')) cats.add('❄️ Climas / Refrigeración');
+            else if (cl !== 'visita' && cl !== 'trabajo' && cl !== 'solicitud' && cl !== 'pendiente' && cl !== 'otro') {
+                cats.add(`🔧 ${c.trim()}`);
+            }
+        };
+
+        // 1. De subTareas
+        if (Array.isArray(subTareas)) {
+            subTareas.forEach((st: any) => {
+                normalizeCat(st.titulo);
+                normalizeCat(st.tipoActividad);
+                normalizeCat(st.serviceData?.tipoServicio);
+            });
+        }
+
+        // 2. De actualReporte / taskItems
+        const actualRep = reporteFinal || (() => {
+            const fallbackRaw = localStorage.getItem(`report_data_${trabajo?.id}`);
+            const tempRaw = localStorage.getItem(`report_data_temporal_${trabajo?.id}`);
+            try {
+                return fallbackRaw ? JSON.parse(fallbackRaw) : (tempRaw ? JSON.parse(tempRaw) : null);
+            } catch (e) {
+                return null;
+            }
+        })();
+
+        if (actualRep?.taskItems && Array.isArray(actualRep.taskItems)) {
+            actualRep.taskItems.forEach((tIt: any) => {
+                normalizeCat(tIt.tipoActividad || tIt.customTipoActividad);
+            });
+        }
+
+        if (Array.isArray(taskItems)) {
+            taskItems.forEach((tIt: any) => {
+                normalizeCat(tIt.tipoActividad || tIt.customTipoActividad);
+            });
+        }
+
+        // 3. Fallback de título si no hay categorías registradas
+        if (cats.size === 0 && trabajo) {
+            const tTitle = (trabajo.titulo || '').toLowerCase();
+            if (tTitle.includes('mantenimiento')) cats.add('🛠️ Mantenimiento');
+            else if (tTitle.includes('plomer') || tTitle.includes('fuga') || tTitle.includes('tuber')) cats.add('🚰 Plomería');
+            else if (tTitle.includes('electric') || tTitle.includes('luz') || tTitle.includes('corto')) cats.add('⚡ Electricidad');
+            else if (tTitle.includes('aire') || tTitle.includes('clima')) cats.add('❄️ Climas / Refrigeración');
+            else if (tTitle.includes('albañil') || tTitle.includes('obra')) cats.add('🧱 Albañilería');
+            else if (tTitle.includes('pintura')) cats.add('🎨 Pintura');
+            else if (trabajo.tipo && trabajo.tipo !== 'Visita') cats.add(`🔧 ${trabajo.tipo}`);
+            else cats.add('🛠️ Mantenimiento');
+        }
+
+        return Array.from(cats);
+    }, [subTareas, reporteFinal, taskItems, trabajo]);
+
+    const categorizedServicePoints = useMemo(() => {
+        const pointsMap: Record<number, {
+            index: number;
+            title: string;
+            conceptos: any[];
+            materiales: any[];
+            foto?: string;
+            subtotal: number;
+        }> = {};
+
+        const techTask = subTareas.find(t => t.esCotizacion || t.quoteData);
+        const qData = techTask?.quoteData;
+
+        const getPhotoForPoint = (pIdx: number) => {
+            const actualRep = reporteFinal || (() => {
+                const fallbackRaw = localStorage.getItem(`report_data_${trabajo?.id}`);
+                const tempRaw = localStorage.getItem(`report_data_temporal_${trabajo?.id}`);
+                try {
+                    return fallbackRaw ? JSON.parse(fallbackRaw) : (tempRaw ? JSON.parse(tempRaw) : null);
+                } catch (e) {
+                    return null;
+                }
+            })();
+
+            if (actualRep?.taskItems?.[pIdx - 1]?.foto) return actualRep.taskItems[pIdx - 1].foto;
+            if (taskItems?.[pIdx - 1]?.foto) return taskItems[pIdx - 1].foto;
+            if (subTareas?.[pIdx - 1]?.foto) return subTareas[pIdx - 1].foto;
+            if (subTareas?.[pIdx - 1]?.photos?.[0]) return subTareas[pIdx - 1].photos[0];
+            
+            const match = allTechReportPhotos.find(p => p.label.toLowerCase().startsWith(`punto ${pIdx}`));
+            if (match) return match.url;
+            if (allTechReportPhotos[pIdx - 1] && !allTechReportPhotos[pIdx - 1].label.toLowerCase().includes('solicitud')) {
+                return allTechReportPhotos[pIdx - 1].url;
+            }
+            return undefined;
+        };
+
+        if (qData?.conceptos && qData.conceptos.length > 0) {
+            qData.conceptos.forEach((c: any, idx: number) => {
+                let pIdx = c.puntoIndex;
+                let cleanTitle = c.descripcion || '';
+                const match = cleanTitle.match(/^\[Punto\s*(\d+)\]\s*(.*)/i);
+                if (match) {
+                    pIdx = parseInt(match[1]);
+                    cleanTitle = match[2].trim() || cleanTitle;
+                }
+                if (!pIdx) pIdx = idx + 1;
+
+                if (!pointsMap[pIdx]) {
+                    pointsMap[pIdx] = {
+                        index: pIdx,
+                        title: cleanTitle || `Punto ${pIdx}`,
+                        conceptos: [],
+                        materiales: [],
+                        foto: getPhotoForPoint(pIdx),
+                        subtotal: 0
+                    };
+                }
+                pointsMap[pIdx].conceptos.push(c);
+                const cCost = (Number(c.cantidad) || 1) * (Number(c.precio) || 0);
+                pointsMap[pIdx].subtotal += cCost;
+            });
+        }
+
+        if (qData?.materiales && qData.materiales.length > 0) {
+            qData.materiales.forEach((m: any) => {
+                const pIdx = m.puntoIndex || 1;
+                if (!pointsMap[pIdx]) {
+                    pointsMap[pIdx] = {
+                        index: pIdx,
+                        title: `Punto ${pIdx}`,
+                        conceptos: [],
+                        materiales: [],
+                        foto: getPhotoForPoint(pIdx),
+                        subtotal: 0
+                    };
+                }
+                pointsMap[pIdx].materiales.push(m);
+                const mCost = (Number(m.cantidad) || 1) * (Number(m.precio) || 0);
+                pointsMap[pIdx].subtotal += mCost;
+            });
+        }
+
+        // Si no hay qData conceptos, generar desde subTareas o taskItems
+        if (Object.keys(pointsMap).length === 0 && subTareas.length > 0) {
+            subTareas.forEach((st: any, idx: number) => {
+                const pIdx = idx + 1;
+                const pTitle = st.cleanDescripcion || st.descripcion || st.titulo || `Punto ${pIdx}`;
+                const cleanPTitle = pTitle.split('\n')[0].replace(/^\[Punto\s*\d+\]\s*/i, '').trim();
+                pointsMap[pIdx] = {
+                    index: pIdx,
+                    title: cleanPTitle || `Punto ${pIdx}`,
+                    conceptos: [{ descripcion: cleanPTitle, cantidad: 1, precio: st.cotizacionMonto || '0' }],
+                    materiales: [],
+                    foto: st.foto || (st.photos && st.photos[0]) || getPhotoForPoint(pIdx),
+                    subtotal: Number(String(st.cotizacionMonto || '0').replace(/[^0-9.]/g, '')) || 0
+                };
+            });
+        }
+
+        return Object.values(pointsMap).sort((a, b) => a.index - b.index);
+    }, [subTareas, reporteFinal, trabajo, taskItems, allTechReportPhotos]);
 
     // Resumen de Contexto del Servicio & Equipo / Especialidad
     const serviceContextInfo = useMemo(() => {
@@ -8408,9 +8589,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                             {serviceContextInfo && (
                                                                 <div style={{
                                                                     background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                                                                    border: '1.5px solid #cbd5e1',
-                                                                    borderRadius: '16px',
-                                                                    padding: '16px 18px',
+                                                                    border: '2px solid #cbd5e1',
+                                                                    borderRadius: '18px',
+                                                                    padding: '18px 20px',
                                                                     marginBottom: '20px',
                                                                     display: 'flex',
                                                                     flexDirection: 'column',
@@ -8418,16 +8599,31 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                     boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
                                                                 }}>
                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                            <span style={{ fontSize: '18px' }}>📌</span>
-                                                                            <span style={{ fontSize: '14.5px', fontWeight: '850', color: '#0f172a' }}>
-                                                                                {serviceContextInfo.titulo || 'Servicio a Cotizar'}
+                                                                        <div>
+                                                                            <span style={{ fontSize: '10.5px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '4px' }}>
+                                                                                CATEGORÍA REGISTRADA:
                                                                             </span>
+                                                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                                                {registeredTechCategories.map((cat, cIdx) => (
+                                                                                    <span key={cIdx} style={{
+                                                                                        background: '#eff6ff',
+                                                                                        color: '#1d4ed8',
+                                                                                        border: '1.5px solid #93c5fd',
+                                                                                        padding: '4px 12px',
+                                                                                        borderRadius: '20px',
+                                                                                        fontSize: '13.5px',
+                                                                                        fontWeight: '900',
+                                                                                        display: 'inline-flex',
+                                                                                        alignItems: 'center',
+                                                                                        gap: '4px',
+                                                                                        boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)'
+                                                                                    }}>
+                                                                                        {cat}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
                                                                         </div>
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                                            <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '11px', fontWeight: '800', padding: '3px 10px', borderRadius: '20px', border: '1px solid #bae6fd' }}>
-                                                                                {serviceContextInfo.specialty}
-                                                                            </span>
                                                                             <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '11px', fontWeight: '800', padding: '3px 10px', borderRadius: '20px', border: '1px solid #fde68a' }}>
                                                                                 🏢 {serviceContextInfo.sucursal}
                                                                             </span>
@@ -8435,6 +8631,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                 👷 Técnico: {serviceContextInfo.tecnico}
                                                                             </span>
                                                                         </div>
+                                                                    </div>
+                                                                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '8px' }}>
+                                                                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '850', color: '#0f172a' }}>
+                                                                            📌 {serviceContextInfo.titulo || 'Servicio a Cotizar'}
+                                                                        </h3>
                                                                     </div>
 
                                                                     {/* DATOS DEL EQUIPO EN CUESTIÓN (SI ES MANTENIMIENTO O TIENE EQUIPO) */}
@@ -8929,44 +9130,83 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                             </div>
                                                         </div>
                                                     )}
-                                                    {/* Card 1.5: Datos del Trabajo y Equipo en el Drawer */}
-                                                    {serviceContextInfo && (
-                                                        <div style={{ background: '#fff', borderRadius: '20px', padding: '18px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1.5px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                                                                <span style={{ fontSize: '13.5px', fontWeight: '850', color: '#1e293b' }}>
-                                                                    📌 {serviceContextInfo.titulo || 'Servicio'}
+                                                    {/* Card 1: Categoría Registrada por el Técnico */}
+                                                    <div style={{
+                                                        background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                                                        border: '2px solid #cbd5e1',
+                                                        borderRadius: '20px',
+                                                        padding: '18px 20px',
+                                                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '12px'
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                                            <div>
+                                                                <span style={{ fontSize: '10.5px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '4px' }}>
+                                                                    CATEGORÍA REGISTRADA:
                                                                 </span>
-                                                                <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '10.5px', fontWeight: '800', padding: '2px 8px', borderRadius: '12px' }}>
-                                                                    {serviceContextInfo.specialty}
-                                                                </span>
+                                                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                                    {registeredTechCategories.map((cat, cIdx) => (
+                                                                        <span key={cIdx} style={{
+                                                                            background: '#eff6ff',
+                                                                            color: '#1d4ed8',
+                                                                            border: '1.5px solid #93c5fd',
+                                                                            padding: '4px 12px',
+                                                                            borderRadius: '20px',
+                                                                            fontSize: '13.5px',
+                                                                            fontWeight: '900',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '4px',
+                                                                            boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)'
+                                                                        }}>
+                                                                            {cat}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
                                                             </div>
-
-                                                            {serviceContextInfo.equip && (
-                                                                <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px' }}>
-                                                                    <span style={{ fontSize: '10.5px', fontWeight: '850', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
-                                                                        🖥️ Datos del Equipo (Mantenimiento):
-                                                                    </span>
-                                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px' }}>
-                                                                        <div><strong style={{ color: '#15803d' }}>Equipo:</strong> {serviceContextInfo.equip.nombre || 'Equipo'}</div>
-                                                                        {serviceContextInfo.equip.marca && <div><strong style={{ color: '#15803d' }}>Marca:</strong> {serviceContextInfo.equip.marca}</div>}
-                                                                        {serviceContextInfo.equip.modelo && <div><strong style={{ color: '#15803d' }}>Modelo:</strong> {serviceContextInfo.equip.modelo}</div>}
-                                                                        {serviceContextInfo.equip.area && <div><strong style={{ color: '#15803d' }}>Área:</strong> {serviceContextInfo.equip.area}</div>}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {serviceContextInfo.problema && !serviceContextInfo.equip && (
-                                                                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 12px' }}>
-                                                                    <span style={{ fontSize: '10.5px', fontWeight: '850', color: '#c2410c', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
-                                                                        📝 Problema Reportado:
-                                                                    </span>
-                                                                    <p style={{ margin: 0, fontSize: '12.5px', color: '#475569', lineHeight: '1.4' }}>
-                                                                        {serviceContextInfo.problema}
-                                                                    </p>
-                                                                </div>
-                                                            )}
+                                                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '800', background: '#f1f5f9', padding: '3px 10px', borderRadius: '12px' }}>
+                                                                🏢 {serviceContextInfo?.sucursal || 'Sucursal'}
+                                                            </span>
                                                         </div>
-                                                    )}
+
+                                                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                                                            <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: '850', color: '#0f172a' }}>
+                                                                📌 {serviceContextInfo?.titulo || 'Servicio de Visita'}
+                                                            </h3>
+                                                        </div>
+
+                                                        {/* SI ES MANTENIMIENTO: DATOS DEL EQUIPO */}
+                                                        {registeredTechCategories.some(c => c.includes('Mantenimiento')) && serviceContextInfo?.equip && (
+                                                            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '12px 14px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                                                                    <span style={{ fontSize: '14px' }}>🖥️</span>
+                                                                    <span style={{ fontSize: '11px', fontWeight: '850', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                        Datos del Equipo en Mantenimiento:
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '12.5px' }}>
+                                                                    <div><span style={{ color: '#15803d', fontSize: '10.5px', fontWeight: '800', display: 'block' }}>EQUIPO:</span> <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.nombre || 'Equipo Principal'}</strong></div>
+                                                                    {serviceContextInfo.equip.marca && <div><span style={{ color: '#15803d', fontSize: '10.5px', fontWeight: '800', display: 'block' }}>MARCA:</span> <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.marca}</strong></div>}
+                                                                    {serviceContextInfo.equip.modelo && <div><span style={{ color: '#15803d', fontSize: '10.5px', fontWeight: '800', display: 'block' }}>MODELO:</span> <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.modelo}</strong></div>}
+                                                                    {serviceContextInfo.equip.area && <div><span style={{ color: '#15803d', fontSize: '10.5px', fontWeight: '800', display: 'block' }}>ÁREA:</span> <strong style={{ color: '#0f172a' }}>{serviceContextInfo.equip.area}</strong></div>}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* SI ES PLOMERÍA / ELECTRICIDAD / OTRO: MOSTRAR TRABAJO O PROBLEMA */}
+                                                        {(!registeredTechCategories.some(c => c.includes('Mantenimiento')) || serviceContextInfo?.problema) && (
+                                                            <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: '12px', padding: '12px 14px' }}>
+                                                                <span style={{ fontSize: '11px', fontWeight: '850', color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '4px' }}>
+                                                                    📝 Detalle del Trabajo / Problema:
+                                                                </span>
+                                                                <p style={{ margin: 0, fontSize: '12.5px', color: '#475569', lineHeight: '1.4', fontWeight: '600' }}>
+                                                                    {serviceContextInfo?.problema || 'Servicio registrado por el técnico.'}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
 
                                                     {/* Card 2: Evidencia Fotográfica del Técnico */}
                                                     {allTechReportPhotos.length > 0 && (
@@ -8975,12 +9215,12 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                     <span style={{ fontSize: '18px' }}>📷</span>
                                                                     <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
-                                                                        Fotos del Reporte del Técnico ({allTechReportPhotos.length})
+                                                                        Fotos del Reporte por Punto / Categoría ({allTechReportPhotos.length})
                                                                     </h3>
                                                                 </div>
                                                                 <span style={{ fontSize: '11px', color: '#94a3b8' }}>Click para ampliar</span>
                                                             </div>
-                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))', gap: '10px' }}>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
                                                                 {allTechReportPhotos.map((photo, pIdx) => (
                                                                     <div
                                                                         key={pIdx}
@@ -8990,22 +9230,22 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             display: 'flex',
                                                                             flexDirection: 'column',
                                                                             alignItems: 'center',
-                                                                            gap: '4px',
+                                                                            gap: '6px',
                                                                             background: '#f8fafc',
-                                                                            padding: '4px',
-                                                                            borderRadius: '10px',
-                                                                            border: '1px solid #e2e8f0',
-                                                                            transition: 'transform 0.15s ease'
+                                                                            padding: '6px',
+                                                                            borderRadius: '12px',
+                                                                            border: '1.5px solid #e2e8f0',
+                                                                            transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                                                                         }}
-                                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                                                                        onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                                                                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
+                                                                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
                                                                     >
                                                                         <img
                                                                             src={photo.url}
                                                                             alt={photo.label}
                                                                             style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '8px' }}
                                                                         />
-                                                                        <span style={{ fontSize: '10px', fontWeight: '750', color: '#64748b', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#334155', textAlign: 'center', width: '100%', lineHeight: '1.25', wordBreak: 'break-word' }}>
                                                                             {photo.label}
                                                                         </span>
                                                                     </div>
@@ -9099,26 +9339,133 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                                     {!isMinimized && (
                                                                                         <>
-                                                                                            {tarea.quoteData?.conceptos && tarea.quoteData.conceptos.length > 0 && (
+                                                                                            {/* 1. CONCEPTOS Y PUNTOS DE SERVICIO CATEGORIZADOS */}
+                                                                                            {categorizedServicePoints.length > 0 ? (
                                                                                                 <div style={{ marginTop: '15px' }}>
-                                                                                                    <h4 style={{ color: '#d97706', fontSize: '15px', fontWeight: '800', borderBottom: '1px solid #d97706', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase' }}>1. Conceptos de Servicio</h4>
-                                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                                                                        {tarea.quoteData.conceptos.map((c: any, idx: number) => (
-                                                                                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'linear-gradient(to right, #f8fafc, #ffffff)', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
-                                                                                                                <div style={{ fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
-                                                                                                                    {c.descripcion}
+                                                                                                    <h4 style={{ color: '#d97706', fontSize: '14px', fontWeight: '850', borderBottom: '1.5px solid #fed7aa', paddingBottom: '6px', marginBottom: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                                        <span>📋</span> Puntos de Trabajo y Conceptos Categorizados
+                                                                                                    </h4>
+                                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                                                                        {categorizedServicePoints.map((pt) => (
+                                                                                                            <div key={pt.index} style={{
+                                                                                                                background: '#ffffff',
+                                                                                                                border: '1.5px solid #cbd5e1',
+                                                                                                                borderRadius: '14px',
+                                                                                                                padding: '14px',
+                                                                                                                display: 'flex',
+                                                                                                                flexDirection: 'column',
+                                                                                                                gap: '10px',
+                                                                                                                boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+                                                                                                            }}>
+                                                                                                                {/* Cabecera del Punto */}
+                                                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                                                                        <span style={{
+                                                                                                                            background: '#ffedd5',
+                                                                                                                            color: '#ea580c',
+                                                                                                                            fontSize: '11px',
+                                                                                                                            fontWeight: '900',
+                                                                                                                            padding: '3px 8px',
+                                                                                                                            borderRadius: '6px',
+                                                                                                                            border: '1px solid #fed7aa'
+                                                                                                                        }}>
+                                                                                                                            Punto #{pt.index}
+                                                                                                                        </span>
+                                                                                                                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
+                                                                                                                            {pt.title}
+                                                                                                                        </h4>
+                                                                                                                    </div>
+                                                                                                                    <span style={{ fontSize: '14px', fontWeight: '900', color: '#ea580c' }}>
+                                                                                                                        Subtotal: ${pt.subtotal.toLocaleString('es-MX')}
+                                                                                                                    </span>
                                                                                                                 </div>
-                                                                                                                <div style={{ display: 'flex', gap: '15px', fontSize: '13px', color: '#475569' }}>
-                                                                                                                    <div><strong>Cant:</strong> <span style={{ color: '#0f172a', fontWeight: '600' }}>{c.cantidad || 1}</span></div>
-                                                                                                                    <div><strong>Precio:</strong> <span style={{ color: '#0f172a', fontWeight: '600' }}>{c.precio ? `$${Number(c.precio).toLocaleString('es-MX')}` : '---'}</span></div>
-                                                                                                                    <div style={{ marginLeft: 'auto', fontWeight: '900', color: '#d97706', fontSize: '14px' }}>
-                                                                                                                        Importe: ${(Number(c.cantidad || 1) * Number(c.precio || 0)).toLocaleString('es-MX')}
+
+                                                                                                                {/* Contenido: Foto del Punto + Conceptos */}
+                                                                                                                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                                                                                                    {pt.foto && (
+                                                                                                                        <div
+                                                                                                                            onClick={() => setSelectedZoomImage(pt.foto)}
+                                                                                                                            style={{
+                                                                                                                                width: '85px',
+                                                                                                                                height: '85px',
+                                                                                                                                borderRadius: '10px',
+                                                                                                                                overflow: 'hidden',
+                                                                                                                                border: '1.5px solid #fed7aa',
+                                                                                                                                flexShrink: 0,
+                                                                                                                                cursor: 'pointer',
+                                                                                                                                background: '#f8fafc',
+                                                                                                                                position: 'relative',
+                                                                                                                                boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                                                                                                                            }}
+                                                                                                                            title="Click para ampliar foto de este punto"
+                                                                                                                        >
+                                                                                                                            <img
+                                                                                                                                src={pt.foto}
+                                                                                                                                alt={`Punto ${pt.index}`}
+                                                                                                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                                                                            />
+                                                                                                                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: '9px', fontWeight: '800', textAlign: 'center', padding: '2px 0' }}>
+                                                                                                                                🔍 Ampliar
+                                                                                                                            </div>
+                                                                                                                        </div>
+                                                                                                                    )}
+
+                                                                                                                    <div style={{ flex: 1, minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                                                                                        {pt.conceptos.map((c, cIdx) => (
+                                                                                                                            <div key={cIdx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                                                                                                                <div>
+                                                                                                                                    <span style={{ fontSize: '12.5px', fontWeight: '750', color: '#334155', display: 'block' }}>
+                                                                                                                                        {c.descripcion?.replace(/^\[Punto\s*\d+\]\s*/i, '') || c.descripcion}
+                                                                                                                                    </span>
+                                                                                                                                    <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                                                                                                                        Cant: {c.cantidad || 1} &times; ${Number(c.precio || 0).toLocaleString('es-MX')}
+                                                                                                                                    </span>
+                                                                                                                                </div>
+                                                                                                                                <strong style={{ fontSize: '13px', color: '#d97706', fontWeight: '850' }}>
+                                                                                                                                    ${((Number(c.cantidad) || 1) * (Number(c.precio) || 0)).toLocaleString('es-MX')}
+                                                                                                                                </strong>
+                                                                                                                            </div>
+                                                                                                                        ))}
+
+                                                                                                                        {pt.materiales && pt.materiales.map((m, mIdx) => (
+                                                                                                                            <div key={mIdx} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                                                                                                                                <div>
+                                                                                                                                    <span style={{ fontWeight: '750', color: '#92400e' }}>🪛 {m.nombre}</span>
+                                                                                                                                    <span style={{ fontSize: '11px', color: '#b45309', marginLeft: '6px' }}>Cant: {m.cantidad || 1}</span>
+                                                                                                                                </div>
+                                                                                                                                <strong style={{ color: '#b45309' }}>
+                                                                                                                                    ${((Number(m.cantidad) || 1) * (Number(m.precio) || 0)).toLocaleString('es-MX')}
+                                                                                                                                </strong>
+                                                                                                                            </div>
+                                                                                                                        ))}
                                                                                                                     </div>
                                                                                                                 </div>
                                                                                                             </div>
                                                                                                         ))}
                                                                                                     </div>
                                                                                                 </div>
+                                                                                            ) : (
+                                                                                                tarea.quoteData?.conceptos && tarea.quoteData.conceptos.length > 0 && (
+                                                                                                    <div style={{ marginTop: '15px' }}>
+                                                                                                        <h4 style={{ color: '#d97706', fontSize: '15px', fontWeight: '800', borderBottom: '1px solid #d97706', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase' }}>1. Conceptos de Servicio</h4>
+                                                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                                                                            {tarea.quoteData.conceptos.map((c: any, idx: number) => (
+                                                                                                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'linear-gradient(to right, #f8fafc, #ffffff)', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
+                                                                                                                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
+                                                                                                                        {c.descripcion}
+                                                                                                                    </div>
+                                                                                                                    <div style={{ display: 'flex', gap: '15px', fontSize: '13px', color: '#475569' }}>
+                                                                                                                        <div><strong>Cant:</strong> <span style={{ color: '#0f172a', fontWeight: '600' }}>{c.cantidad || 1}</span></div>
+                                                                                                                        <div><strong>Precio:</strong> <span style={{ color: '#0f172a', fontWeight: '600' }}>{c.precio ? `$${Number(c.precio).toLocaleString('es-MX')}` : '---'}</span></div>
+                                                                                                                        <div style={{ marginLeft: 'auto', fontWeight: '900', color: '#d97706', fontSize: '14px' }}>
+                                                                                                                            Importe: ${(Number(c.cantidad || 1) * Number(c.precio || 0)).toLocaleString('es-MX')}
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            ))}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                )
                                                                                             )}
 
                                                                                             {tarea.quoteData?.materiales && tarea.quoteData.materiales.length > 0 && (
