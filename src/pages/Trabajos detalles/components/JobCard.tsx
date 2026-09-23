@@ -220,17 +220,33 @@ const JobCard: React.FC<JobCardProps> = ({
 
                         {/* Fechas y badge NUEVO */}
                         <div className={styles.headerRow}>
-                            <div className={styles.dateGroup}>
+                            <div className={styles.dateGroup} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                                 {!isCardSeen(userRole, trabajo.id, trabajo.estado) && (
                                     <span className={styles.newBadgeMini} style={{ background: seenAccent.grad, boxShadow: `0 2px 8px ${seenAccent.shadow}` }}>
                                         {seenAccent.dot} NUEVO
                                     </span>
                                 )}
-                                <p className={styles.strikingDate}>
+                                {items.length > 1 && (
+                                    <span style={{
+                                        background: '#e0f2fe',
+                                        color: '#0369a1',
+                                        border: '1px solid #bae6fd',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        fontWeight: '800',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                    }}>
+                                        📦 Solicitud en Lote ({items.length} servicios)
+                                    </span>
+                                )}
+                                <p className={styles.strikingDate} style={{ margin: 0 }}>
                                     📅 Cita solicitada: {trabajo.fechaAsignada || trabajo.fecha}
                                 </p>
                                 {(trabajo as any).hora_llegada && (
-                                    <p className={styles.technicianArrivalTag}>
+                                    <p className={styles.technicianArrivalTag} style={{ margin: 0 }}>
                                         📍 Técnico en sitio (Llegada: {(trabajo as any).hora_llegada})
                                     </p>
                                 )}

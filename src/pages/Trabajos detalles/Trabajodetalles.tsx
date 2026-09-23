@@ -715,8 +715,24 @@ const TrabajoDetalle: React.FC = () => {
 
                 const isEmergency = isSOSRequest;
                 for (const svc of modalFormServices) {
-                    const finalCat = svc.categoria === "Otro" && svc.customCategoria.trim() !== "" ? svc.customCategoria.trim() : svc.categoria;
-                    const descWithGroup = finalGroupId ? `[Grupo: ${finalGroupId}]\n${svc.descripcion}` : svc.descripcion;
+                    let finalCat = svc.categoria === "Otro" && svc.customCategoria.trim() !== "" ? svc.customCategoria.trim() : svc.categoria;
+                    let foundEq: any = null;
+                    if (svc.categoria === "Mantenimiento" && svc.equipoSeleccionado) {
+                        foundEq = (businessAreas || []).flatMap((a: any) => a.equipos || []).find((e: any) => String(e.id) === String(svc.equipoSeleccionado));
+                        if (foundEq) {
+                            finalCat = `Mantenimiento: ${foundEq.nombre}`;
+                        }
+                    }
+
+                    let svcDesc = svc.descripcion;
+                    if (svc.categoria === "Mantenimiento" && foundEq) {
+                        const eqInfo = `${foundEq.nombre} (${foundEq.marca || ''} ${foundEq.modelo || ''})`.trim();
+                        if (!svcDesc.includes(`[Equipo:`)) {
+                            svcDesc = `[Equipo: ${eqInfo}]\n${svcDesc}`;
+                        }
+                    }
+
+                    const descWithGroup = finalGroupId ? `[Grupo: ${finalGroupId}]\n${svcDesc}` : svcDesc;
                     if (svc.dbId) {
                         await updateTrabajo(svc.dbId, {
                             titulo: isEmergency ? `🚨 SOS: ${finalCat} - ${businessName}` : `${finalCat} - ${modalNewRequestData.cliente || businessName}`,
@@ -730,6 +746,7 @@ const TrabajoDetalle: React.FC = () => {
                             prioridad: isEmergency ? "Alta" : "Media",
                             tipo: isEmergency ? "SOS" : "Nueva Solicitud",
                             negocio_id: Number(id),
+                            levantamiento_equipo_id: svc.equipoSeleccionado ? Number(svc.equipoSeleccionado) : null,
                             fecha_programada: modalNewRequestData.fecha || null,
                             trabajador_id: null
                         });
@@ -748,18 +765,24 @@ const TrabajoDetalle: React.FC = () => {
                 const isEmergency = isSOSRequest;
 
                 for (const svc of modalFormServices) {
-                    const finalCat = svc.categoria === "Otro" && svc.customCategoria.trim() !== "" ? svc.customCategoria.trim() : svc.categoria;
-                    const descWithGroup = finalGroupId ? `[Grupo: ${finalGroupId}]\n${svc.descripcion}` : svc.descripcion;
-
+                    let finalCat = svc.categoria === "Otro" && svc.customCategoria.trim() !== "" ? svc.customCategoria.trim() : svc.categoria;
+                    let foundEq: any = null;
                     if (svc.categoria === "Mantenimiento" && svc.equipoSeleccionado) {
-                        await createMantenimientoSolicitud({
-                            cliente_id: user?.id || 1,
-                            negocio_id: Number(id),
-                            levantamiento_equipo_id: svc.equipoSeleccionado,
-                            descripcion_problema: svc.descripcion || "Mantenimiento general programado"
-                        });
-                        continue;
+                        foundEq = (businessAreas || []).flatMap((a: any) => a.equipos || []).find((e: any) => String(e.id) === String(svc.equipoSeleccionado));
+                        if (foundEq) {
+                            finalCat = `Mantenimiento: ${foundEq.nombre}`;
+                        }
                     }
+
+                    let svcDesc = svc.descripcion;
+                    if (svc.categoria === "Mantenimiento" && foundEq) {
+                        const eqInfo = `${foundEq.nombre} (${foundEq.marca || ''} ${foundEq.modelo || ''})`.trim();
+                        if (!svcDesc.includes(`[Equipo:`)) {
+                            svcDesc = `[Equipo: ${eqInfo}]\n${svcDesc}`;
+                        }
+                    }
+
+                    const descWithGroup = finalGroupId ? `[Grupo: ${finalGroupId}]\n${svcDesc}` : svcDesc;
 
                     if (svc.fotos.length > 0) {
                         const formData = new FormData();
@@ -768,6 +791,7 @@ const TrabajoDetalle: React.FC = () => {
                         formData.append("prioridad", isEmergency ? "Alta" : "Media");
                         formData.append("tipo", isEmergency ? "SOS" : "Nueva Solicitud");
                         formData.append("negocio_id", id || "");
+                        if (svc.equipoSeleccionado) formData.append("levantamiento_equipo_id", svc.equipoSeleccionado);
                         if (modalNewRequestData.fecha) formData.append("fecha_programada", modalNewRequestData.fecha);
                         svc.fotos.forEach(file => formData.append("fotos[]", file));
                         await createTrabajo(formData);
@@ -778,6 +802,7 @@ const TrabajoDetalle: React.FC = () => {
                             prioridad: isEmergency ? "Alta" : "Media",
                             tipo: isEmergency ? "SOS" : "Nueva Solicitud",
                             negocio_id: Number(id),
+                            levantamiento_equipo_id: svc.equipoSeleccionado ? Number(svc.equipoSeleccionado) : null,
                             fecha_programada: modalNewRequestData.fecha || null,
                             trabajador_id: null
                         });
