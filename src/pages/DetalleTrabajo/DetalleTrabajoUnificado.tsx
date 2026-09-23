@@ -773,7 +773,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
             // 1. Guardar/Actualizar la cotización en backend
             const quoteDescriptions = approvedPoints.map((p) => {
-                return `${p.titulo || `Punto #${p.pointNumber}`}: $${p.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+                return `${p.titulo || `Punto #${p.pointNumber}`}: $${(Number(p.subtotal) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
             });
 
             try {
@@ -5524,7 +5524,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                 fontWeight: '900',
                                 border: '1px solid #bbf7d0'
                             }}>
-                                Total: ${totalPrice.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                Total: ${(Number(totalPrice) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                             </span>
                         )}
                         {(() => {
@@ -7253,7 +7253,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                                                                 <span style={{ fontSize: '11px', fontWeight: '800', color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Seleccionado</span>
                                                                 <span style={{ fontSize: '26px', fontWeight: '900', color: '#ea580c' }}>
-                                                                    ${selectedSosTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                                    ${(Number(selectedSosTotal) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -7316,7 +7316,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             <div style={{ textAlign: 'right' }}>
                                                                                 <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>Subtotal Punto</span>
                                                                                 <p style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: isSelected ? '#ea580c' : '#94a3b8' }}>
-                                                                                    ${pointTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                                                    ${(Number(pointTotal) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                                                                 </p>
                                                                             </div>
                                                                         </div>
@@ -7694,7 +7694,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             </div>
                                                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                                                                                 <p className={styles.clientCotizPriceLabel}>{isPending && hasItems ? 'TOTAL SELECCIONADO' : 'MONTO TOTAL'}</p>
-                                                                                <p className={styles.clientCotizPrice}>${displayTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                                                <p className={styles.clientCotizPrice}>${(Number(displayTotal) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                             </div>
                                                                         </div>
 
@@ -7843,7 +7843,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                         <div className={styles.clientCotizTotalRow}>
                                                                             <span className={styles.clientCotizTotalLabel}>⚡ {isPending && hasItems ? 'Monto Seleccionado' : 'Monto Total'}</span>
-                                                                            <span className={styles.clientCotizTotalValue}>${displayTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                            <span className={styles.clientCotizTotalValue}>${(Number(displayTotal) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                                         </div>
 
                                                                         <button
@@ -7963,7 +7963,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     <HiOutlineCheckCircle size={20} />
                                                                                     {hasItems && acceptedItemsList.length === 0
                                                                                         ? 'Selecciona al menos 1 servicio'
-                                                                                        : `Aceptar Servicios Seleccionados ($${displayTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                                                                                        : `Aceptar Servicios Seleccionados ($${(Number(displayTotal) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
                                                                                     }
                                                                                 </button>
                                                                                 <button className={styles.clientCotizBtnRecotizar} onClick={() => { setCotizParaRecotizar(cotiz.id!); setShowRecotizModal(true); }}>
@@ -8257,7 +8257,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                             const totalCalc = (parseFloat(editManoObra) || 0) + matsTotal;
                                                                                             return (
                                                                                                 <span style={{ fontSize: '15px', fontWeight: '900', color: '#1e293b', background: '#fff7ed', padding: '4px 12px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                                                                                    Total: ${totalCalc.toLocaleString('es-MX')}
+                                                                                                    Total: ${(Number(totalCalc) || 0).toLocaleString('es-MX')}
                                                                                                 </span>
                                                                                             );
                                                                                         })()}
@@ -8402,7 +8402,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                                     {/* Fila 2: Monto y Acciones */}
                                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
-                                                                                        <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#1e293b' }}>${Number(cotiz.monto).toLocaleString('es-MX')}</p>
+                                                                                        <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#1e293b' }}>${(Number(cotiz?.monto) || 0).toLocaleString('es-MX')}</p>
                                                                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', maxWidth: '100%' }}>
                                                                                             <button onClick={() => { setCosto(cotiz.monto?.toString() || ''); setNotas(cotiz.descripcion || ''); setShowPDFPreview(true); }} style={{ padding: '7px 11px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', cursor: 'pointer', fontSize: '12px', fontWeight: '700', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}><HiOutlineDocumentText size={15} /> Preview PDF</button>
                                                                                             {canEditCotizacion && (
@@ -8681,7 +8681,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                         </div>
                                                                                         {pt.manoObra > 0 && (
                                                                                             <span style={{ fontSize: '12px', fontWeight: '900', color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                                                                                                Sugerencia Técnico: ${pt.manoObra.toLocaleString('es-MX')}
+                                                                                                Sugerencia Técnico: ${(Number(pt.manoObra) || 0).toLocaleString('es-MX')}
                                                                                             </span>
                                                                                         )}
                                                                                     </div>
@@ -8809,7 +8809,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     {item.titulo && <span style={{ fontWeight: 'bold' }}>Título: {item.titulo}</span>}
                                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                                         <span>Notas: {item.notas ? (item.notas.length > 30 ? `${item.notas.substring(0, 30)}...` : item.notas) : 'Sin notas'}</span>
-                                                                                        <strong style={{ color: '#f26522', fontSize: '15px' }}>${itemTotal.toLocaleString('es-MX')}</strong>
+                                                                                        <strong style={{ color: '#f26522', fontSize: '15px' }}>${(Number(itemTotal) || 0).toLocaleString('es-MX')}</strong>
                                                                                     </div>
                                                                                 </div>
                                                                             ) : (
@@ -8946,7 +8946,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff7ed', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
                                                                                         <span style={{ fontSize: '12px', fontWeight: '800', color: '#92400e' }}>Importe Propuesta</span>
-                                                                                        <strong style={{ fontSize: '16px', color: '#f26522' }}>${itemTotal.toLocaleString('es-MX')}</strong>
+                                                                                        <strong style={{ fontSize: '16px', color: '#f26522' }}>${(Number(itemTotal) || 0).toLocaleString('es-MX')}</strong>
                                                                                     </div>
 
                                                                                     <button
@@ -9233,7 +9233,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                              </div>
                                                                              {pt.manoObra > 0 && (
                                                                                  <span style={{ fontSize: '11.5px', fontWeight: '900', color: '#16a34a', background: '#f0fdf4', padding: '2px 6px', borderRadius: '6px' }}>
-                                                                                     ${pt.manoObra.toLocaleString('es-MX')}
+                                                                                     ${(Number(pt.manoObra) || 0).toLocaleString('es-MX')}
                                                                                  </span>
                                                                              )}
                                                                          </div>
@@ -9372,7 +9372,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                 hasCalculatedTotal = true;
                                                                             }
 
-                                                                            const showMonto = hasCalculatedTotal ? calculatedTotal.toLocaleString('es-MX') : (tarea.cotizacionMonto === 'Por Evaluar' ? 'Sin monto' : tarea.cotizacionMonto);
+                                                                            const showMonto = hasCalculatedTotal ? (Number(calculatedTotal) || 0).toLocaleString('es-MX') : (tarea.cotizacionMonto === 'Por Evaluar' ? 'Sin monto' : tarea.cotizacionMonto);
                                                                             const isMinimized = !!minimizedTechQuotes[tarea.id];
                                                                             const isAcceptedState = tarea.cotizacionEstado === 'Aprobada' || ['Cotización Aceptada', 'Cotización Aprobada', 'Aceptada', 'Finalizado', 'Completado'].includes(trabajo?.estado || '');
                                                                             const isRejectedState = tarea.cotizacionEstado === 'Rechazada' || trabajo?.estado === 'Cotización Rechazada';
@@ -9451,7 +9451,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                                         </h4>
                                                                                                                     </div>
                                                                                                                     <span style={{ fontSize: '14px', fontWeight: '900', color: '#ea580c' }}>
-                                                                                                                        Subtotal: ${pt.subtotal.toLocaleString('es-MX')}
+                                                                                                                        Subtotal: ${(Number(pt.subtotal) || 0).toLocaleString('es-MX')}
                                                                                                                     </span>
                                                                                                                 </div>
 
