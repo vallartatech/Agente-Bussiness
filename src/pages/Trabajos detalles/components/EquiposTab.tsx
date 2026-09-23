@@ -8,7 +8,7 @@ import HistorialEquipoModal from '../../../components/modals/HistorialEquipoModa
 import DetalleReporteModal from '../../../components/modals/DetalleReporteModal';
 import ModalSeleccionEspacio from '../../../components/ModalSeleccionEspacio';
 import ReporteDetailModal from '../../../components/modals/ReporteDetailModal';
-import EquiposNegocio from '../../admin/EquiposNegocio';
+import EquiposNegocio, { getMergedIntervenciones } from '../../admin/EquiposNegocio';
 import { createMantenimientoSolicitud } from '../../../services/mantenimientoService';
 import { getReporteByTrabajoId } from '../../../services/reportesService';
 import { getTrabajo } from '../../../services/trabajosService';
@@ -27,6 +27,7 @@ interface EquiposTabProps {
     // Levantamiento (estado vive en el padre porque también lo usa NuevoServicioModal)
     businessAreas: any[];
     allSolicitudes: any[];
+    trabajosData?: any[];
     canEdit: boolean;
     canEditBanner: boolean;
     // Handlers del levantamiento
@@ -59,6 +60,7 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
     bannerY,
     businessAreas,
     allSolicitudes,
+    trabajosData,
     canEdit,
     canEditBanner,
     persistLevantamiento,
@@ -254,6 +256,7 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                         businessId={Number(id)} 
                         businessAreas={businessAreas}
                         solicitudesList={allSolicitudes}
+                        trabajosList={trabajosData}
                         onViewReport={handleOpenReportDetail} 
                     />
                 </div>
@@ -295,7 +298,11 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                                             canEdit={canEdit}
                                             onEditArea={() => editAreaName(seccion.id, seccion.nombreArea)}
                                             onDeleteArea={() => handleDeleteArea(seccion.id, seccion.nombreArea)}
-                                            onAddSubArea={() => { setActiveAreaForSub(seccion.id); setIsSubAreaModalOpen(true); }}
+                                            onAddSubArea={() => {
+                                                setActiveSectionId(seccion.id);
+                                                setInitialSubAreaId(null);
+                                                setIsLevantamientoModalOpen(true);
+                                            }}
                                             onViewInventory={(subAreaId) => {
                                                 const subArea = seccion.subAreas?.find((s: any) => s.id === subAreaId);
                                                 if (subArea?.equipos?.length > 0) {
@@ -405,7 +412,7 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                 isOpen={bitacoraModalOpen}
                 onClose={() => setBitacoraModalOpen(false)}
                 equipo={selectedEqForBitacora}
-                historial={selectedEqForBitacora ? allSolicitudes.filter(sol => String(sol.levantamiento_equipo_id) === String(selectedEqForBitacora.id)) : []}
+                historial={selectedEqForBitacora ? getMergedIntervenciones(selectedEqForBitacora, allSolicitudes, trabajosData) : []}
                 onViewReport={(trabajoId) => { setSelectedTrabajoIdForBitacora(trabajoId); setReporteModalOpenForBitacora(true); }}
             />
 
@@ -421,8 +428,9 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                 isOpen={isAreaModalOpen || isSubAreaModalOpen}
                 onClose={() => { setIsAreaModalOpen(false); setIsSubAreaModalOpen(false); setActiveAreaForSub(null); }}
                 title={isAreaModalOpen ? 'Agregar Nueva Área' : 'Agregar Nueva Sub-área'}
-                placeholder={isAreaModalOpen ? 'Ej: COCINA, COMEDOR, AZOTEA' : 'Ej: REFRIGERACIÓN, ESTUFAS'}
-                onSubmit={isAreaModalOpen ? doAddArea : doAddSubArea}
+                subtitle={isAreaModalOpen ? 'Selecciona o escribe el nombre del área' : 'Selecciona o escribe el nombre de la sub-área'}
+                predefinedOptions={isAreaModalOpen ? ['COCINA', 'COMEDOR', 'AZOTEA', 'BAÑOS', 'BODEGA'] : ['REFRIGERACIÓN', 'ESTUFAS', 'EXTRACCIÓN', 'CLIMATIZACIÓN']}
+                onAdd={isAreaModalOpen ? doAddArea : doAddSubArea}
             />
         </div>
     );

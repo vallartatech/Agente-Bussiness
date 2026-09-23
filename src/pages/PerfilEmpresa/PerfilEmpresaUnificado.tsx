@@ -1268,8 +1268,9 @@ const PerfilEmpresaUnificado: React.FC<{ config: PerfilEmpresaConfig }> = ({ con
                                                 onEditArea={() => editAreaName(seccion.id, seccion.nombreArea)}
                                                 onDeleteArea={() => handleDeleteArea(seccion.id, seccion.nombreArea)}
                                                 onAddSubArea={() => {
-                                                    setActiveAreaForSub(seccion.id);
-                                                    setIsSubAreaModalOpen(true);
+                                                    setActiveSectionId(seccion.id);
+                                                    setInitialSubAreaId(null);
+                                                    setIsLevantamientoModalOpen(true);
                                                 }}
                                                 onViewInventory={(subAreaId) => {
                                                     const subArea = seccion.subAreas?.find(s => s.id === subAreaId);

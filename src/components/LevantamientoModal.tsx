@@ -97,39 +97,30 @@ const LevantamientoModal: React.FC<LevantamientoModalProps> = ({ isOpen, onClose
             const normalized = normalizeData(data);
             setSections(normalized);
 
-            // Only auto-select if nothing is currently selected or if the currently selected item no longer exists
             const isMobile = window.innerWidth <= 768;
 
-            setActiveSectionId(prevSecId => {
-                const secExists = normalized.find(s => s.id === prevSecId);
-                if (secExists) return prevSecId;
+            let targetSec: any = null;
+            if (initialSectionId) {
+                targetSec = normalized.find(s => s.id === initialSectionId);
+            }
+            if (!targetSec && !isMobile && normalized.length > 0) {
+                targetSec = normalized[0];
+            }
 
-                const targetSec = initialSectionId ? normalized.find(s => s.id === initialSectionId) : (isMobile ? null : (normalized[0] || null));
-                return targetSec ? targetSec.id : null;
-            });
+            const activeSecId = targetSec ? targetSec.id : null;
+            setActiveSectionId(activeSecId);
 
-            setActiveSubAreaId(prevSubId => {
-                // Determine the current section after the update above
-                let currentSecId = activeSectionId;
-                const secExists = normalized.find(s => s.id === currentSecId);
-                if (!secExists) {
-                    const targetSec = initialSectionId ? normalized.find(s => s.id === initialSectionId) : (isMobile ? null : (normalized[0] || null));
-                    currentSecId = targetSec ? targetSec.id : null;
+            if (targetSec) {
+                if (initialSubAreaId && targetSec.subAreas?.find((sub: any) => sub.id === initialSubAreaId)) {
+                    setActiveSubAreaId(initialSubAreaId);
+                } else if (targetSec.subAreas && targetSec.subAreas.length > 0) {
+                    setActiveSubAreaId(targetSec.subAreas[0].id);
+                } else {
+                    setActiveSubAreaId(null);
                 }
-
-                if (!currentSecId) return null;
-                const currentSec = normalized.find(s => s.id === currentSecId);
-                if (!currentSec) return null;
-
-                const subExists = currentSec.subAreas?.find(sub => sub.id === prevSubId);
-                if (subExists) return prevSubId;
-
-                if (initialSubAreaId && currentSec.subAreas?.find(sub => sub.id === initialSubAreaId)) {
-                    return initialSubAreaId;
-                }
-
-                return currentSec.subAreas && currentSec.subAreas.length > 0 ? currentSec.subAreas[0].id : null;
-            });
+            } else {
+                setActiveSubAreaId(null);
+            }
         }
     }, [isOpen, data, initialSectionId, initialSubAreaId]);
 

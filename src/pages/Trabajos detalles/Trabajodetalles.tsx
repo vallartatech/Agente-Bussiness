@@ -904,6 +904,7 @@ const TrabajoDetalle: React.FC = () => {
                         bannerY={bannerY}
                         businessAreas={businessAreas}
                         allSolicitudes={allSolicitudes}
+                        trabajosData={trabajosData}
                         canEdit={canEdit}
                         canEditBanner={canEditBanner}
                         persistLevantamiento={persistLevantamiento}

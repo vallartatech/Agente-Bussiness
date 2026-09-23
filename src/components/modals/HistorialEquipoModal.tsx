@@ -121,11 +121,11 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                 [req.visita_trabajo, req.reparacion_trabajo].forEach(t => {
                                     if (t?.reporte?.solucion) {
                                         try {
-                                            const p = JSON.parse(t.reporte.solucion);
-                                            if (p.descripcion || p.reporteTienda) {
+                                            const p = typeof t.reporte.solucion === 'string' ? JSON.parse(t.reporte.solucion) : t.reporte.solucion;
+                                            if (p.descripcion || p.reporteTienda || p.hallazgo) {
                                                 rawReports.push({
                                                     id: t.id,
-                                                    problema_cliente: p.reporteTienda || '—',
+                                                    problema_cliente: p.reporteTienda || p.hallazgo || '—',
                                                     trabajo_realizado: p.descripcion || '—',
                                                     materiales: p.materiales || '',
                                                     refacciones: Array.isArray(p.refaccionesList)
@@ -136,6 +136,25 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                         } catch (e) { }
                                     }
                                 });
+
+                                // Si el item es un trabajo con reporte propio
+                                if (req.reporte?.solucion || req.solucion) {
+                                    try {
+                                        const rawSol = req.reporte?.solucion || req.solucion;
+                                        const p = typeof rawSol === 'string' ? JSON.parse(rawSol) : rawSol;
+                                        if (p.descripcion || p.reporteTienda || p.hallazgo) {
+                                            rawReports.push({
+                                                id: req.id || req.original_id,
+                                                problema_cliente: p.reporteTienda || p.hallazgo || req.descripcion || '—',
+                                                trabajo_realizado: p.descripcion || req.descripcion || '—',
+                                                materiales: p.materiales || '',
+                                                refacciones: Array.isArray(p.refaccionesList)
+                                                    ? p.refaccionesList.map((r: any) => `${r.cantidad}x ${r.pieza}`).join(' · ')
+                                                    : ''
+                                            });
+                                        }
+                                    } catch (e) { }
+                                }
 
                                 const seenReports = new Set();
                                 const finalReports = rawReports.filter(r => {
@@ -150,6 +169,21 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                     displayEstado = 'Finalizado';
                                 } else if (req.visita_trabajo && ['Finalizado', 'Completado'].includes(req.visita_trabajo.estado) && (req.estado === 'Visita Asignada' || req.estado === 'Pendiente')) {
                                     displayEstado = 'Finalizado';
+                                }
+
+                                const itemDate = req.created_at || req.fechaSolicitud || req.fecha;
+                                let displayDate = 'Fecha no disponible';
+                                if (itemDate) {
+                                    if (typeof itemDate === 'string' && (itemDate.includes('/') || itemDate.includes('-')) && !itemDate.includes('T')) {
+                                        displayDate = itemDate;
+                                    } else {
+                                        try {
+                                            const d = new Date(itemDate);
+                                            displayDate = isNaN(d.getTime()) ? String(itemDate) : d.toLocaleDateString('es-MX');
+                                        } catch (_) {
+                                            displayDate = String(itemDate);
+                                        }
+                                    }
                                 }
 
                                 return (
@@ -177,7 +211,7 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
 
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <HiOutlineCalendarDays style={{ color: '#94a3b8' }} /> {new Date(req.created_at).toLocaleDateString()}
+                                                <HiOutlineCalendarDays style={{ color: '#94a3b8' }} /> {displayDate}
                                             </span>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                 <span style={{
@@ -195,8 +229,8 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                         <div style={{ fontSize: '15px', color: '#1e293b', margin: '0', display: 'flex', alignItems: 'flex-start', gap: '10px', lineHeight: '1.5' }}>
                                             <HiOutlineWrenchScrewdriver style={{ marginTop: '3px', flexShrink: 0, color: '#f26522', fontSize: '18px' }} />
                                             <div>
-                                                <span style={{ fontWeight: '800', color: '#64748b', fontSize: '11px', display: 'block', marginBottom: '2px' }}>REPORTE DEL CLIENTE</span>
-                                                <span style={{ fontWeight: '500' }}>"{req.descripcion_problema}"</span>
+                                                <span style={{ fontWeight: '800', color: '#64748b', fontSize: '11px', display: 'block', marginBottom: '2px' }}>REPORTE DEL CLIENTE / TRABAJO</span>
+                                                <span style={{ fontWeight: '500' }}>"{req.descripcion_problema || req.descripcion || req.titulo || 'Mantenimiento registrado'}"</span>
                                             </div>
                                         </div>
 
@@ -237,9 +271,9 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                                                                         onClick={(e) => {
                                                                                             e.preventDefault();
                                                                                             e.stopPropagation();
-                                                                                            const targetId = rep.id || req.actualTrabajoId;
+                                                                                            const targetId = rep.id || req.actualTrabajoId || req.original_id || req.id;
                                                                                             if (targetId) {
-                                                                                                onViewReport?.(targetId);
+                                                                                                onViewReport?.(Number(String(targetId).replace('m-', '').replace('gen-', '')));
                                                                                             }
                                                                                         }}
                                                                                         style={{ fontSize: '13px', color: '#475569', cursor: 'pointer', transition: 'all 0.2s', position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '5px' }}
@@ -276,8 +310,9 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                                                                 onClick={(e) => {
                                                                                     e.preventDefault();
                                                                                     e.stopPropagation();
-                                                                                    const targetId = req.actualTrabajoId || (finalReports[finalReports.length - 1]?.id);
-                                                                                    if (targetId) {
+                                                                                    const rawTargetId = req.actualTrabajoId || req.original_id || req.id || (finalReports[finalReports.length - 1]?.id);
+                                                                                    if (rawTargetId) {
+                                                                                        const targetId = Number(String(rawTargetId).replace('m-', '').replace('gen-', ''));
                                                                                         onViewReport(targetId);
                                                                                     }
                                                                                 }}

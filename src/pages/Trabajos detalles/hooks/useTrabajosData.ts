@@ -55,12 +55,16 @@ export const useTrabajosData = (
                     });
 
                     return {
+                        ...sol,
                         id: sol.id,
+                        levantamiento_equipo_id: sol.levantamiento_equipo_id || sol.levantamiento_equipo?.id || sol.equipo_id,
                         descripcion: sol.descripcion_problema,
+                        descripcion_problema: sol.descripcion_problema,
                         estado: sol.estado,
                         fecha: new Date(sol.created_at).toLocaleDateString('es-MX'),
                         tipo: 'Mantenimiento',
-                        reportes: mappedReportes
+                        reportes: mappedReportes,
+                        actualTrabajoId: sol.reparacion_trabajo?.id || sol.reparacion_trabajo_id || sol.visita_trabajo?.id || sol.visita_trabajo_id
                     };
                 });
                 setAllSolicitudes(mappedSolicitudes);
