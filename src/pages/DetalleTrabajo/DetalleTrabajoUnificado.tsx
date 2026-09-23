@@ -670,7 +670,23 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
     // MOCK DATA
     const [trabajo, setTrabajo] = useState<Trabajo | null>(null);
-    const isSOS = Boolean(trabajo?.tipo === "SOS" || trabajo?.prioridad === "Emergencia" || (trabajo?.titulo || '').includes("SOS") || (trabajo as any)?.isEmergency);
+    const isSOS = Boolean(
+        trabajo?.tipo === "SOS" || 
+        trabajo?.prioridad === "Emergencia" || 
+        (trabajo?.titulo || '').toUpperCase().includes("SOS") || 
+        (trabajo?.titulo || '').toUpperCase().includes("EMERGENCIA") ||
+        (trabajo as any)?.isEmergency ||
+        (trabajo as any)?.is_emergency ||
+        (trabajo as any)?.tipo_servicio === "SOS" ||
+        (trabajo as any)?.servicio === "SOS" ||
+        (trabajo as any)?.categoria === "SOS" ||
+        (trabajo as any)?.originalTipo === "SOS" ||
+        (trabajo as any)?.solicitud?.tipo === "SOS" ||
+        (trabajo as any)?.solicitud?.prioridad === "Emergencia" ||
+        (trabajo as any)?.solicitud?.is_emergency ||
+        (trabajo as any)?.mantenimiento_solicitud_visita?.tipo === "SOS" ||
+        (trabajo as any)?.mantenimiento_solicitud_visita?.prioridad === "Emergencia"
+    );
     const [groupedJobs, setGroupedJobs] = useState<any[]>([]);
     const [latestChatQuote, setLatestChatQuote] = useState<any>(null);
     const [subTareas, setSubTareas] = useState<SubTarea[]>([]);
@@ -1114,7 +1130,24 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             try {
                 const data = await getTrabajo(Number(id));
                 currentTech = data.trabajador?.nombre || "Sin Asignar";
+                const isEmergencyJob = Boolean(
+                    data.tipo === "SOS" || 
+                    data.prioridad === "Emergencia" || 
+                    data.is_emergency || 
+                    data.isEmergency || 
+                    (data.titulo || "").toUpperCase().includes("SOS") || 
+                    (data.titulo || "").toUpperCase().includes("EMERGENCIA") ||
+                    (data as any)?.solicitud?.tipo === "SOS" ||
+                    (data as any)?.solicitud?.prioridad === "Emergencia" ||
+                    (data as any)?.solicitud?.is_emergency ||
+                    data.tipo_servicio === "SOS" ||
+                    data.servicio === "SOS" ||
+                    data.categoria === "SOS" ||
+                    data.originalTipo === "SOS"
+                );
+
                 const calculatedTipo = (() => {
+                    if (isEmergencyJob) return "SOS";
                     if (data.tipo === "SOS") return "SOS";
                     if (data.tipo === "Trabajo") return "Trabajo";
                     if (data.tipo === "Visita") {
@@ -1134,7 +1167,13 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     fecha: data.fecha_programada || new Date(data.created_at).toLocaleDateString('es-MX'),
                     estado: (data.estado === "Pendiente" ? "Solicitud" : data.estado) as any,
                     tipo: calculatedTipo,
-                    originalTipo: data.tipo || calculatedTipo,
+                    originalTipo: data.tipo || data.originalTipo || calculatedTipo,
+                    prioridad: data.prioridad || (isEmergencyJob ? "Emergencia" : ""),
+                    isEmergency: isEmergencyJob,
+                    tipo_servicio: data.tipo_servicio || data.servicio || "",
+                    servicio: data.servicio || data.tipo_servicio || "",
+                    categoria: data.categoria || "",
+                    solicitud: (data as any).solicitud || null,
                     visitado: data.visitado,
                     descripcion: data.descripcion,
                     latitud_llegada: data.latitud_llegada,
@@ -1865,8 +1904,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         setConfirmacionLlegada(false);
         setHoraLlegada("");
         setRefacciones([]);
-        setIsQuoteIncluded(false);
-        setQuoteConceptos([]);
+        setIsQuoteIncluded(true);
+        setQuoteConceptos([{ descripcion: '', cantidad: '1', precio: '' }]);
         setQuoteMateriales([]);
         setQuoteComentarios("");
         setActivityPhotos([]);
@@ -1883,8 +1922,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 modelo: firstEq ? (firstEq.modelo || '') : '',
                 pieza: '',
                 garantia: '',
-                isQuoteIncluded: isSOS,
-                quoteConceptos: isSOS ? [{ descripcion: '', cantidad: '1', precio: '' }] : [],
+                isQuoteIncluded: true,
+                quoteConceptos: [{ descripcion: '', cantidad: '1', precio: '' }],
                 quoteMateriales: [],
                 quoteComentarios: ''
             }
@@ -2741,6 +2780,45 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
     const handleAddTask = async (generatePDF = false) => {
         try {
             const activeItems = taskItems.filter(t => t.descripcion.trim() || t.foto);
+            if (activeItems.length === 0 && !newTaskDescription.trim()) {
+                showAlert("Descripción Requerida", "Por favor ingresa una descripción o detalle del trabajo realizado.", "warning");
+                return;
+            }
+
+            // Validar que la cotización sea obligatoria
+            if (isSOS) {
+                const hasValidSosQuote = activeItems.some(it =>
+                    it.isQuoteIncluded !== false &&
+                    (it.quoteConceptos || []).some(c => c.descripcion.trim() && parseFloat(c.precio) > 0)
+                );
+                if (!hasValidSosQuote) {
+                    showAlert(
+                        "Cotización Obligatoria",
+                        "Es obligatorio incluir al menos un concepto de cotización con descripción y precio en los puntos de revisión antes de guardar.",
+                        "warning"
+                    );
+                    return;
+                }
+            } else {
+                if (!isQuoteIncluded) {
+                    showAlert(
+                        "Cotización Obligatoria",
+                        "Es obligatorio incluir una cotización para poder guardar este registro de actividad.",
+                        "warning"
+                    );
+                    return;
+                }
+                const validConceptos = quoteConceptos.filter(c => c.descripcion.trim() && parseFloat(c.precio) > 0);
+                if (validConceptos.length === 0) {
+                    showAlert(
+                        "Cotización Incompleta",
+                        "Debes ingresar al menos un concepto de servicio con su descripción y precio mayor a $0 antes de guardar.",
+                        "warning"
+                    );
+                    return;
+                }
+            }
+
             const combinedDesc = activeItems.length > 0
                 ? activeItems.map((item, idx) => {
                     const tipoLabel = item.tipoActividad === 'Otro' ? (item.customTipoActividad || 'Otro') : (item.tipoActividad || 'Mantenimiento');
@@ -3272,8 +3350,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 setQuoteComentarios("");
             }
         } else {
-            setIsQuoteIncluded(false);
-            setQuoteConceptos([]);
+            setIsQuoteIncluded(true);
+            setQuoteConceptos([{ descripcion: '', cantidad: '1', precio: '' }]);
             setQuoteMateriales([]);
             setQuoteComentarios("");
         }
@@ -11281,16 +11359,26 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                 </div>
 
                                 {!isSOS && (
-                                    <div style={{ marginTop: '18px', background: '#f8fafc', padding: '16px 18px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13.5px', fontWeight: '700', color: '#1e293b', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={isQuoteIncluded}
-                                                onChange={(e) => setIsQuoteIncluded(e.target.checked)}
-                                                style={{ width: '18px', height: '18px', accentColor: '#f26522' }}
-                                            />
-                                            Agregar Cotización para el Administrador
-                                        </label>
+                                    <div style={{ marginTop: '18px', background: '#fffbeb', padding: '16px 18px', borderRadius: '14px', border: '1.5px solid #fed7aa' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isQuoteIncluded ? '14px' : '0' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13.5px', fontWeight: '800', color: '#9a3412', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isQuoteIncluded}
+                                                    onChange={(e) => setIsQuoteIncluded(e.target.checked)}
+                                                    style={{ width: '18px', height: '18px', accentColor: '#f26522' }}
+                                                />
+                                                💰 Cotización para el Administrador <span style={{ fontSize: '11px', background: '#ea580c', color: '#fff', padding: '2px 8px', borderRadius: '6px', fontWeight: '800', letterSpacing: '0.3px', textTransform: 'uppercase' }}>Obligatorio</span>
+                                            </label>
+                                            {isQuoteIncluded && (
+                                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#c2410c', background: '#ffedd5', padding: '3px 10px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                                    Total: ${(
+                                                        quoteConceptos.reduce((sum, c) => sum + (parseFloat(c.precio) || 0) * (parseFloat(c.cantidad) || 1), 0) +
+                                                        quoteMateriales.reduce((sum, m) => sum + (parseFloat(m.precio) || 0) * (parseFloat(m.cantidad) || 1), 0)
+                                                    ).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </span>
+                                            )}
+                                        </div>
 
                                         {isQuoteIncluded && (
                                             <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
