@@ -28,6 +28,7 @@ interface TareaHistorial {
     trabajoId: number;
     monthYear?: string;
     rawJob?: any;
+    photos?: string[];
 }
 
 const isJobSOS = (job: any): boolean => {
@@ -167,9 +168,10 @@ const extractServiceType = (job: any, pointIdx?: number, subId?: string | number
     // 4. Revisar etiquetas de puntos: "1. [Electricidad] ..." o "[Plomería] ..."
     if (pointIdx !== undefined) {
         const regexPoint = /(?:^|\n+)(\d+)\.\s*\[([^\]]+)\]/g;
-        const matches = Array.from(rawDesc.matchAll(regexPoint));
-        if (matches && matches[pointIdx - 1] && matches[pointIdx - 1][2]) {
-            return matches[pointIdx - 1][2].trim();
+        const matches = Array.from(rawDesc.matchAll(regexPoint)) as RegExpMatchArray[];
+        const targetMatch = matches[pointIdx - 1];
+        if (targetMatch && targetMatch[2]) {
+            return targetMatch[2].trim();
         }
     }
     const singleBracketMatch = rawDesc.match(/\[(Electricidad|Plomer[ií]a|Pintura|Cerrajer[ií]a|Mantenimiento|Albañiler[ií]a|Aire Acondicionado|Herrer[ií]a|Tablaroca|Instalaci[oó]n|Reparaci[oó]n|Diagn[oó]stico|Otro)\]/i);
@@ -411,7 +413,7 @@ const AdminHistorial: React.FC = () => {
                 const allTasks: TareaHistorial[] = [];
 
                 // 1. Procesar grupos [Grupo: REQ-xxxx]
-                for (const [grpId, jobsInGroup] of Object.entries(groupedByReq)) {
+                for (const [, jobsInGroup] of Object.entries(groupedByReq)) {
                     jobsInGroup.sort((a, b) => Number(a.id) - Number(b.id));
                     const baseJob = jobsInGroup[0];
                     const finalDate = parseJobDate(baseJob.fecha_programada, baseJob.created_at);
@@ -435,7 +437,7 @@ const AdminHistorial: React.FC = () => {
                         }
                     } catch (_) {}
 
-                    let decomposedFromActs: TareaHistorial[] = [];
+                    const decomposedFromActs: TareaHistorial[] = [];
                     const isGroupSOS = isJobSOS(baseJob) || jobsInGroup.some(isJobSOS);
 
                     if (acts && acts.length > 0) {

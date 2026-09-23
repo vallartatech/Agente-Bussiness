@@ -3,8 +3,8 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import styles from './AdminReporte.module.css';
 import { createReporte, getReporteByTrabajoId } from '../../services/reportesService';
 import { getActividadesByTrabajo } from '../../services/actividadesService';
-import { updateEstadoTrabajo, getTrabajo } from '../../services/trabajosService';
-import { createNotificacionByRole, createNotificacion, createNotificacionNegocio } from '../../services/notificacionesService';
+import { getTrabajo } from '../../services/trabajosService';
+import { createNotificacionByRole, createNotificacion } from '../../services/notificacionesService';
 import { useAuth } from '../../context/AuthContext';
 import { useModal } from '../../context/ModalContext';
 import { isAutonomoAdmin } from '../../utils/roles';
@@ -132,7 +132,6 @@ const AdminReporte: React.FC = () => {
     const [reporteId, setReporteId] = useState<number | null>(null);
     const [fechaInicio, setFechaInicio] = useState<string>('');
     const [involucraEquipo, setInvolucraEquipo] = useState(false);
-    const [showEquiposSection, setShowEquiposSection] = useState(false);
     const [availableEquipos, setAvailableEquipos] = useState<{
         id: string | number;
         nombre: string;
@@ -220,7 +219,6 @@ const AdminReporte: React.FC = () => {
             const safeId = trabajoId || id;
             const queryParams = new URLSearchParams(location.search);
             const subtareaIdParam = queryParams.get('subtareaId') || location.state?.subtareaId || location.state?.actividadId;
-            const activeKey = subtareaIdParam ? String(subtareaIdParam) : String(safeId);
 
             try {
                 // 1. Obtener Trabajo y Actividades desde el Backend (Fuente de Verdad de la Solicitud)
@@ -311,7 +309,7 @@ const AdminReporte: React.FC = () => {
                             }
                         } else {
                             const regexPoint = /(?:^|\n+)(\d+)\.\s*(?:\[([^\]]+)\]\s*)?([\s\S]*?)(?=(?:\n+\d+\.\s*)|$)/g;
-                            const matches = Array.from(taskCleanDesc.matchAll(regexPoint));
+                            const matches = Array.from(taskCleanDesc.matchAll(regexPoint)) as RegExpMatchArray[];
                             if (matches && matches[pointIndex]) {
                                 const m = matches[pointIndex];
                                 const ptTipo = m[2] ? m[2].trim() : targetAct.tipo;
@@ -362,12 +360,6 @@ const AdminReporte: React.FC = () => {
 
                 // Diagnóstico Inicial estrictamente con las notas de ESTA tarea
                 setReporteTienda(taskCleanDesc);
-
-                // Determinar si la tarea actual requiere sección de equipo
-                const isEquipoTask = targetAct ? 
-                    (targetAct.tipo === 'Mantenimiento' || targetAct.tipo === 'Instalacion' || targetAct.tipo === 'Instalación') :
-                    (acts.some((a: any) => a.tipo === 'Mantenimiento' || a.tipo === 'Instalacion' || a.tipo === 'Instalación') || String(jobData.titulo || '').toLowerCase().includes('mantenimiento'));
-                setShowEquiposSection(isEquipoTask);
 
                 // 1.5 Descubrir equipos de la solicitud / sucursal
                 const equipMap = new Map();
@@ -826,7 +818,7 @@ const AdminReporte: React.FC = () => {
 
         try {
             // Recopilar reportes existentes para no sobreescribir los otros puntos de la actividad/trabajo
-            let cleanSubReports: Record<string, any> = {};
+            const cleanSubReports: Record<string, any> = {};
             try {
                 const existingDbReport = await getReporteByTrabajoId(Number(safeId));
                 if (existingDbReport && existingDbReport.solucion) {
@@ -956,7 +948,7 @@ const AdminReporte: React.FC = () => {
 
         // Guardar registro del reporte en la BD (acumulando todos los sub-puntos sin duplicados masivos)
         try {
-            let cleanSubReports: Record<string, any> = {};
+            const cleanSubReports: Record<string, any> = {};
             try {
                 const existingDbReport = await getReporteByTrabajoId(Number(safeTrabajoId));
                 if (existingDbReport && existingDbReport.solucion) {
@@ -1006,7 +998,7 @@ const AdminReporte: React.FC = () => {
             
             let completedCount = 0;
             acts.forEach((a: any) => {
-                if (String(a.id) === String(activeKey) || a.estado === 'Completa' || !!localStorage.getItem(`report_data_${a.id}`)) {
+                if (String(a.id) === String(activeStorageKey) || a.estado === 'Completa' || !!localStorage.getItem(`report_data_${a.id}`)) {
                     completedCount++;
                 }
             });
@@ -1050,7 +1042,7 @@ const AdminReporte: React.FC = () => {
 
     const cleanGroupTags = (str: string): string => {
         if (!str) return '';
-        return str.replace(/^[\*\-\s]*\[Grupo:\s*[^\]]+\]\s*/gi, '').replace(/\*+$/g, '').trim();
+        return str.replace(/^[*-\s]*\[Grupo:\s*[^\]]+\]\s*/gi, '').replace(/\*+$/g, '').trim();
     };
 
     return (

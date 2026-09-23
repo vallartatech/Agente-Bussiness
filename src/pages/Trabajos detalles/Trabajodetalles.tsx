@@ -94,6 +94,19 @@ const TrabajoDetalle: React.FC = () => {
     const [tecnicosData, setTecnicosData] = useState<Tecnico[]>([]);
 
     useEffect(() => {
+        const cached = localStorage.getItem('trabajadores_list');
+        if (cached) {
+            try {
+                const list = JSON.parse(cached);
+                const techList = list.filter((t: any) => t.estado?.toLowerCase() === "activo" || t.estado === "Activo");
+                setTecnicosData(techList.map((t: any) => ({
+                    id: t.id,
+                    userId: t.user_id || null,
+                    nombre: t.nombre
+                })));
+            } catch (_) {}
+        }
+
         const fetchTecnicos = async () => {
             try {
                 const data = await getTrabajadores();

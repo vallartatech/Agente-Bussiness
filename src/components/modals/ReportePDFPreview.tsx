@@ -1016,7 +1016,8 @@ export default function ReportePDFPreview({ trabajo, reporteData, subTareas, isV
                                         Observaciones Adicionales ({reporteData.observacionesList.length})
                                     </h5>
                                     {reporteData.observacionesList.map((obs, idx) => {
-                                        const imgs = (obs.imagenes && Array.isArray(obs.imagenes) ? obs.imagenes : (obs.foto ? [obs.foto] : [])).filter(Boolean);
+                                        const obsAny = obs as any;
+                                        const imgs = (obs.imagenes && Array.isArray(obs.imagenes) ? obs.imagenes : (obsAny.foto ? [obsAny.foto] : [])).filter(Boolean);
                                         return (
                                             <div key={obs.id || idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

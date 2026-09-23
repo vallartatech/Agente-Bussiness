@@ -10,6 +10,18 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'axios',
+      'lucide-react',
+      'react-icons/hi2',
+      'react-icons/fa',
+      'leaflet'
+    ]
+  },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {

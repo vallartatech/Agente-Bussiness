@@ -8,11 +8,6 @@ import { getActividadesByTrabajo } from "../../services/actividadesService";
 import ReporteDetailModal from "../../components/modals/ReporteDetailModal";
 import { findMatchingSubReport } from "../../utils/reportUtils";
 
-import {
-    HiOutlineCheckBadge,
-    HiOutlineCheckCircle
-} from "react-icons/hi2";
-
 // Interfaz para la Tarea del Historial
 interface TareaHistorial {
     id: number | string;
@@ -29,6 +24,7 @@ interface TareaHistorial {
     trabajoId: number;
     monthYear?: string;
     rawJob?: any;
+    photos?: string[];
 }
 
 interface HistorialProps {
@@ -172,9 +168,10 @@ const extractServiceType = (job: any, pointIdx?: number, subId?: string | number
     // 4. Revisar etiquetas de puntos: "1. [Electricidad] ..." o "[Plomería] ..."
     if (pointIdx !== undefined) {
         const regexPoint = /(?:^|\n+)(\d+)\.\s*\[([^\]]+)\]/g;
-        const matches = Array.from(rawDesc.matchAll(regexPoint));
-        if (matches && matches[pointIdx - 1] && matches[pointIdx - 1][2]) {
-            return matches[pointIdx - 1][2].trim();
+        const matches = Array.from(rawDesc.matchAll(regexPoint)) as RegExpMatchArray[];
+        const targetMatch = matches[pointIdx - 1];
+        if (targetMatch && targetMatch[2]) {
+            return targetMatch[2].trim();
         }
     }
     const singleBracketMatch = rawDesc.match(/\[(Electricidad|Plomer[ií]a|Pintura|Cerrajer[ií]a|Mantenimiento|Albañiler[ií]a|Aire Acondicionado|Herrer[ií]a|Tablaroca|Instalaci[oó]n|Reparaci[oó]n|Diagn[oó]stico|Otro)\]/i);
@@ -368,7 +365,6 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
     const [selectedHistoryTask, setSelectedHistoryTask] = useState<TareaHistorial | null>(null);
     const [searchText, setSearchText] = useState("");
     const [reportData, setReportData] = useState<any>(null);
-    const [loadingReport, setLoadingReport] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
@@ -434,7 +430,7 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                 const allTasks: TareaHistorial[] = [];
 
                 // 1. Procesar grupos [Grupo: REQ-xxxx]
-                for (const [grpId, jobsInGroup] of Object.entries(groupedByReq)) {
+                for (const [, jobsInGroup] of Object.entries(groupedByReq)) {
                     jobsInGroup.sort((a, b) => Number(a.id) - Number(b.id));
                     const baseJob = jobsInGroup[0];
                     const finalDate = parseJobDate(baseJob.fecha_programada, baseJob.created_at);
@@ -458,7 +454,7 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                         }
                     } catch (_) {}
 
-                    let decomposedFromActs: TareaHistorial[] = [];
+                    const decomposedFromActs: TareaHistorial[] = [];
                     const isGroupSOS = isJobSOS(baseJob) || jobsInGroup.some(isJobSOS);
 
                     if (acts && acts.length > 0) {
@@ -603,7 +599,6 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
     const handleSelectTask = async (tarea: TareaHistorial) => {
         setSelectedHistoryTask(tarea);
         setReportData(null);
-        setLoadingReport(true);
 
         try {
             const subId = String(tarea.id);
@@ -641,7 +636,6 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                                 } catch (_) {}
                             }
                             setReportData(parsed);
-                            setLoadingReport(false);
                             return;
                         }
                     } catch (e) {
@@ -720,7 +714,6 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                     firmaEmpresa: matchedReport.firmaEmpresa || groupFirmaEmpresa || null
                 };
                 setReportData(finalReport);
-                setLoadingReport(false);
                 return;
             }
 
@@ -742,7 +735,6 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                 imagenesObservacion: taskPhotos.length > 3 ? taskPhotos.slice(3) : [],
                 firmaEmpresa: groupFirmaEmpresa || null
             });
-            setLoadingReport(false);
         } catch (error) {
             console.error("Error al obtener reporte:", error);
             const taskPhotos = tarea.photos || [];
@@ -759,7 +751,6 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                 },
                 imagenesObservacion: taskPhotos.length > 3 ? taskPhotos.slice(3) : []
             });
-            setLoadingReport(false);
         }
     };
 

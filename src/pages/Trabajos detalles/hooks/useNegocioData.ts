@@ -94,38 +94,53 @@ const formatAreasFromBackend = (areas: any[]) => {
 
     // Cargar datos del negocio
     useEffect(() => {
+        if (!id) return;
+
+        // 1. Carga inmediata desde caché local para evitar pantalla "Cargando..."
+        const cachedRaw = localStorage.getItem('negocios_list');
+        if (cachedRaw) {
+            try {
+                const cachedList = JSON.parse(cachedRaw);
+                const found = cachedList.find((n: any) => n.id === Number(id));
+                if (found) {
+                    const plaza = found.nombrePlaza || found.nombre_plaza;
+                    const fullName = plaza ? `${found.nombre} - ${plaza}` : found.nombre;
+                    setBusinessName(fullName);
+                    setBusinessImage(found.imagen_portada || null);
+                    setBusinessDetails(found);
+                    if (found.areas && found.areas.length > 0) {
+                        setBusinessAreas(formatAreasFromBackend(found.areas));
+                    }
+                    onLoaded?.(fullName);
+                }
+            } catch (_) {}
+        }
+
+        // 2. Consulta directa única del negocio individual al servidor
         const fetchBusiness = async () => {
             try {
-                const all = await getNegocios();
-                const current = all.find((n: any) => n.id === Number(id));
-                const individual = await getNegocio(Number(id));
+                const res = await getNegocio(Number(id));
+                const individual = res?.data || res;
+                if (!individual) return;
 
-                const rawAreas = (individual?.areas && individual.areas.length > 0) ? individual.areas : (current?.areas || []);
+                const rawAreas = individual.areas || [];
                 if (rawAreas && rawAreas.length > 0) {
                     setBusinessAreas(formatAreasFromBackend(rawAreas));
                 }
 
-                if (individual || current) {
-                    setBusinessDetails({ ...current, ...individual });
-                }
+                setBusinessDetails(individual);
 
-                let fullName = 'Desconocido';
-                if (current) {
-                    const plaza = current.nombrePlaza || current.nombre_plaza;
-                    fullName = plaza ? `${current.nombre} - ${plaza}` : current.nombre;
-                    setBusinessImage(current.imagen_portada || null);
-                } else if (individual?.nombre) {
-                    const indPlaza = individual.nombrePlaza || individual.nombre_plaza;
-                    fullName = indPlaza ? `${individual.nombre} - ${indPlaza}` : individual.nombre;
-                    setBusinessImage(individual.imagen_portada || null);
-                }
-
+                const indPlaza = individual.nombrePlaza || individual.nombre_plaza;
+                const fullName = indPlaza ? `${individual.nombre} - ${indPlaza}` : (individual.nombre || 'Desconocido');
+                setBusinessImage(individual.imagen_portada || null);
                 setBusinessName(fullName);
                 onLoaded?.(fullName);
             } catch (err) {
                 console.error('Error cargando nombre del negocio:', err);
-                setBusinessName('Desconocido');
-                onLoaded?.('Desconocido');
+                if (businessName === 'Cargando...') {
+                    setBusinessName('Desconocido');
+                    onLoaded?.('Desconocido');
+                }
             }
         };
 
