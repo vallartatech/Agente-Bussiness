@@ -1,20 +1,45 @@
 import React, { useEffect, useState } from 'react';
 import { getNegocio } from '../../services/negociosService';
 import { getMantenimientoSolicitudes } from '../../services/mantenimientoService';
-import { getTrabajos } from '../../services/trabajosService';
-import { getReporteByTrabajoId } from '../../services/reportesService';
 import HistorialEquipoModal from '../../components/modals/HistorialEquipoModal';
 import { 
-    HiOutlineCube, 
-    HiOutlineShieldCheck
+    HiOutlineCube
 } from "react-icons/hi2";
 
 interface EquiposNegocioProps {
     businessId: number;
+    businessAreas?: any[];
+    solicitudesList?: any[];
     onViewReport?: (trabajoId: number) => void;
 }
 
-const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, onViewReport }) => {
+const extractEquipmentsFromAreas = (areas: any[]) => {
+    const list: any[] = [];
+    if (!Array.isArray(areas)) return list;
+    areas.forEach((area: any) => {
+        const areaName = area.nombreArea || area.nombre || 'Área';
+        if (Array.isArray(area.equipos)) {
+            area.equipos.forEach((eq: any) => {
+                list.push({ ...eq, areaNombre: areaName });
+            });
+        }
+        if (Array.isArray(area.subAreas)) {
+            area.subAreas.forEach((sub: any) => {
+                const subName = `${areaName} - ${sub.nombreSubArea || sub.nombre || ''}`.trim();
+                if (Array.isArray(sub.equipos)) {
+                    sub.equipos.forEach((eq: any) => {
+                        if (!list.some(existing => existing.id === eq.id)) {
+                            list.push({ ...eq, areaNombre: subName });
+                        }
+                    });
+                }
+            });
+        }
+    });
+    return list;
+};
+
+const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, businessAreas, solicitudesList, onViewReport }) => {
     const [equipos, setEquipos] = useState<any[]>([]);
     const [solicitudes, setSolicitudes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -24,118 +49,42 @@ const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, onViewRepor
     const [selectedEquipo, setSelectedEquipo] = useState<any>(null);
 
     useEffect(() => {
+        // 1. Si ya tenemos datos precargados del componente padre, usarlos al instante
+        if (businessAreas && businessAreas.length > 0) {
+            const extracted = extractEquipmentsFromAreas(businessAreas);
+            setEquipos(extracted);
+            if (solicitudesList) {
+                setSolicitudes(solicitudesList);
+            }
+            setLoading(false);
+            return;
+        }
+
+        // 2. Si no hay precarga, consultar solo lo indispensable sin bucle N+1
         const fetchData = async () => {
             setLoading(true);
             try {
-                // 1. Obtener todas las áreas y equipos registrados del negocio
-                const negocio = await getNegocio(businessId);
-                const allRegisteredEquipments: any[] = [];
-                
+                const [negocio, solicitudesBackend] = await Promise.all([
+                    getNegocio(businessId).catch(() => null),
+                    solicitudesList ? Promise.resolve(solicitudesList) : getMantenimientoSolicitudes(businessId).catch(() => [])
+                ]);
+
                 if (negocio && negocio.areas) {
-                    negocio.areas.forEach((area: any) => {
-                        if (area.equipos) {
-                            area.equipos.forEach((equipo: any) => {
-                                allRegisteredEquipments.push({ ...equipo, areaNombre: area.nombreArea });
-                            });
-                        }
-                    });
+                    setEquipos(extractEquipmentsFromAreas(negocio.areas));
                 }
 
-                // 2. Obtener solicitudes nativas de mantenimiento
-                const solicitudesBackend = await getMantenimientoSolicitudes(businessId);
-                const mappedSolicitudesBackend = solicitudesBackend.map((sol: any) => {
-                    const mappedReportes = [];
-                    
-                    if (sol.visita_trabajo?.reporte?.solucion) {
-                        try {
-                            const parsed = JSON.parse(sol.visita_trabajo.reporte.solucion);
-                            if (parsed.descripcion || parsed.reporteTienda) {
-                                mappedReportes.push({
-                                    id: sol.visita_trabajo?.id || sol.visita_trabajo_id,
-                                    problema_cliente: parsed.reporteTienda || '—',
-                                    trabajo_realizado: parsed.descripcion || '—',
-                                    materiales: parsed.materiales || '',
-                                    refacciones: Array.isArray(parsed.refaccionesList)
-                                        ? parsed.refaccionesList.map((r: any) => `${r.cantidad}x ${r.pieza}`).join(' · ')
-                                        : ''
-                                });
-                            }
-                        } catch(e) {}
-                    }
-                    
-                    if (sol.reparacion_trabajo?.reporte?.solucion) {
-                         try {
-                            const parsed = JSON.parse(sol.reparacion_trabajo.reporte.solucion);
-                            if (parsed.descripcion || parsed.reporteTienda) {
-                                mappedReportes.push({
-                                    id: sol.reparacion_trabajo?.id || sol.reparacion_trabajo_id,
-                                    problema_cliente: parsed.reporteTienda || '—',
-                                    trabajo_realizado: parsed.descripcion || '—',
-                                    materiales: parsed.materiales || '',
-                                    refacciones: Array.isArray(parsed.refaccionesList)
-                                        ? parsed.refaccionesList.map((r: any) => `${r.cantidad}x ${r.pieza}`).join(' · ')
-                                        : ''
-                                });
-                            }
-                        } catch(e) {}
-                    }
-                    
-                    return {
-                        ...sol,
-                        reportes: mappedReportes,
-                        // El ID real que buscaremos en la tabla de trabajos para el reporte detallado
-                        // Buscamos en varias posibles ubicaciones según la estructura del backend
-                        actualTrabajoId: sol.reparacion_trabajo?.id || sol.reparacion_trabajo_id || sol.visita_trabajo?.id || sol.visita_trabajo_id
-                    };
-                });
-
-                // 3. Rescatar trabajos genéricos antiguos que contenían reportes manuales vinculados al ID del equipo
-                const trabajos = await getTrabajos({ negocio_id: businessId });
-                const trabajosGenericos = trabajos.filter((t: any) => t.estado === 'Finalizado');
-
-                const mappedGenericJobs: any[] = [];
-                for (const job of trabajosGenericos) {
-                    try {
-                        const reporte = await getReporteByTrabajoId(job.id);
-                        if (reporte && reporte.solucion) {
-                            const reportDataRaw = JSON.parse(reporte.solucion);
-                            if (reportDataRaw.involucraEquipo && reportDataRaw.equipoInfo && reportDataRaw.equipoInfo.id) {
-                                mappedGenericJobs.push({
-                                    id: `gen-${job.id}`,
-                                    actualTrabajoId: `gen-${job.id}`,
-                                    levantamiento_equipo_id: reportDataRaw.equipoInfo.id,
-                                    descripcion_problema: job.titulo,
-                                    estado: job.estado,
-                                    created_at: job.created_at,
-                                    visitas: [],
-                                    reportes: [
-                                        {
-                                            falla_encontrada: reportDataRaw.problema || 'Mantenimiento General',
-                                            solucion: "Finalizado: Revisa el reporte físico final firmado."
-                                        }
-                                    ]
-                                });
-                            }
-                        }
-                    } catch (e) {
-                         // Falló el parseo o no tenía reporte
-                    }
+                if (Array.isArray(solicitudesBackend)) {
+                    setSolicitudes(solicitudesBackend);
                 }
-
-                setEquipos(allRegisteredEquipments);
-                // Unimos ambas listas para que el modal tenga un historial ultra-completo
-                setSolicitudes([...mappedSolicitudesBackend, ...mappedGenericJobs]);
             } catch (error: any) {
-                console.error("Error al cargar reporte:", error);
-                const errorMsg = error.response?.status === 404 ? "El reporte aún no ha sido finalizado en el sistema." : "No se pudo cargar el detalle del reporte.";
-                alert(errorMsg);
+                console.error("Error al cargar equipos:", error);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchData();
-    }, [businessId]);
+    }, [businessId, businessAreas, solicitudesList]);
 
     const handleCardClick = (equipo: any) => {
         setSelectedEquipo(equipo);

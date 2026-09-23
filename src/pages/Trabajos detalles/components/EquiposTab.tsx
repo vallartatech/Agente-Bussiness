@@ -250,7 +250,12 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
             {/* Contenido del sub-tab */}
             {equiposSubTab === 'registrados' ? (
                 <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>
-                    <EquiposNegocio businessId={Number(id)} onViewReport={handleOpenReportDetail} />
+                    <EquiposNegocio 
+                        businessId={Number(id)} 
+                        businessAreas={businessAreas}
+                        solicitudesList={allSolicitudes}
+                        onViewReport={handleOpenReportDetail} 
+                    />
                 </div>
             ) : (
                 <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>

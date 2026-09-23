@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getNegocio, getNegocios, updateNegocio, uploadImage } from '../../../services/negociosService';
+import { getNegocio, updateNegocio, uploadImage } from '../../../services/negociosService';
 import { compressImage } from '../../../utils/imageCompression';
 import { useModal } from '../../../context/ModalContext';
 
