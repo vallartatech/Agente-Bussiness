@@ -4083,6 +4083,19 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
     const handleEnviarCotizacionesMasivas = async () => {
         if (!trabajo) return;
+
+        // Validar si hay ítems con monto $0 en el formulario
+        const itemsWithZero = cotizacionesFormItems.filter(item => {
+            const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+            const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
+            return itemTotal <= 0;
+        });
+
+        if (itemsWithZero.length > 0 && cotizacionesFormItems.length > 1) {
+            showAlert('Monto Requerido', `Tienes ${itemsWithZero.length} propuesta(s) con monto $0 (${itemsWithZero.map(i => i.titulo || 'Sin título').join(', ')}). Por favor ingresa el monto de mano de obra o materiales para todas las propuestas antes de enviar.`, 'warning');
+            return;
+        }
+
         const validItems = cotizacionesFormItems.filter(item => {
             const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
             const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
@@ -4094,11 +4107,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             return;
         }
 
+        setIsSendingQuote(true);
+
         try {
             const newState = "Cotización Enviada";
             await updateEstadoTrabajo(trabajo.id, { estado: newState });
             setTrabajo((prev: any) => prev ? { ...prev, estado: newState } : prev);
 
+            const savedList: any[] = [];
             for (let idx = 0; idx < validItems.length; idx++) {
                 const item = validItems[idx];
                 const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
@@ -4122,19 +4138,20 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 // Debug: print what we're sending
                 console.log(`[cotizacion masiva] Enviando propuesta #${idx + 1} de ${validItems.length}: monto:`, itemTotal, 'trabajo_id:', trabajo.id);
 
-                let savedCotiz: any;
                 try {
-                    savedCotiz = await saveCotizacion(payload as any);
+                    const savedCotiz = await saveCotizacion(payload as any);
+                    if (savedCotiz) {
+                        savedList.push(savedCotiz);
+                        setCotizaciones(prev => [...prev, savedCotiz]);
+                    }
                 } catch (cotizErr: any) {
                     console.error(`[cotizacion masiva] Error guardando propuesta #${idx + 1}:`, cotizErr?.response?.data || cotizErr);
-                    throw cotizErr;
                 }
-                setCotizaciones(prev => [...prev, savedCotiz]);
 
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
                 const token = localStorage.getItem('token');
                 try {
-                    const chatMessage = `PROPUESTA DE PRECIO INDIVIDUAL #${idx + 1} - ${item.titulo || 'Sin Título'}: ${itemTotal}${matchedEquip ? ` (Equipo: ${matchedEquip.nombre})` : ''}\nNotas: ${item.notas || "Ninguna"}`;
+                    const chatMessage = `PROPUESTA DE PRECIO INDIVIDUAL #${idx + 1} - ${item.titulo || 'Sin Título'}: $${itemTotal}${matchedEquip ? ` (Equipo: ${matchedEquip.nombre})` : ''}\nNotas: ${item.notas || "Ninguna"}`;
                     await fetch(`${API_URL}/trabajos/${trabajo.id}/chat`, {
                         method: 'POST',
                         headers: {
@@ -4164,7 +4181,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 clientNotifs.unshift({
                     id: Date.now(),
                     titulo: 'Cotización Recibida',
-                    mensaje: `Ya tienes ${validItems.length} propuesta(s) de cotización para revisión (Trabajo #${trabajo.id}).`,
+                    mensaje: `Ya tienes ${savedList.length} propuesta(s) de cotización para revisión (Trabajo #${trabajo.id}).`,
                     fecha: new Date().toLocaleDateString('es-MX', { hour: '2-digit', minute: '2-digit' }),
                     leida: false,
                     jobId: trabajo.id
@@ -4178,9 +4195,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             ]);
             setShowAddQuoteForm(false);
 
-            showAlert('Cotizaciones Enviadas', `Se han enviado ${validItems.length} propuesta(s) de cotización al cliente.`, 'success');
-        } catch (error) {
+            showAlert('Cotizaciones Enviadas', `Se han guardado exitosamente ${savedList.length} propuesta(s) de cotización en la base de datos.`, 'success');
+        } catch (error: any) {
             showAlert('Error', error.response?.data?.message || error.message, 'error');
+        } finally {
+            setIsSendingQuote(false);
         }
     };
 
@@ -8557,7 +8576,34 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                     {!showAddQuoteForm ? (
                                                         canEditCotizacion && (
                                                             <button
-                                                                onClick={() => setShowAddQuoteForm(true)}
+                                                                onClick={() => {
+                                                                    setShowAddQuoteForm(true);
+                                                                    if (categorizedServicePoints && categorizedServicePoints.length > 0) {
+                                                                        const techTask = subTareas.find(t => t.quoteData || t.esCotizacion || t.serviceData);
+                                                                        const mapped: CotizacionFormItem[] = categorizedServicePoints.map((pt, idx) => {
+                                                                            const mats = (pt.materiales && pt.materiales.length > 0)
+                                                                                ? pt.materiales.map((m: any) => ({
+                                                                                    material: m.nombre || m.material || '',
+                                                                                    piezas: String(m.cantidad || m.piezas || '1'),
+                                                                                    precio: String(m.precio || '0')
+                                                                                }))
+                                                                                : [{ material: '', piezas: '', precio: '' }];
+                                                                            return {
+                                                                                id: `item_${idx + 1}_${Date.now()}_${Math.random()}`,
+                                                                                titulo: pt.titulo || `Punto ${idx + 1}`,
+                                                                                manoObra: pt.manoObra > 0 ? String(pt.manoObra) : '0',
+                                                                                materials: mats,
+                                                                                notas: idx === 0 ? (techTask?.cotizacionNotas || techTask?.quoteData?.comentarios || '') : '',
+                                                                                minimized: false,
+                                                                                categoria: pt.categoria,
+                                                                                equip: pt.equip,
+                                                                                foto: pt.foto,
+                                                                                puntoIndex: pt.puntoIndex
+                                                                            };
+                                                                        });
+                                                                        setCotizacionesFormItems(mapped);
+                                                                    }
+                                                                }}
                                                                 style={{ width: '100%', padding: '20px', background: '#fff', border: '2px dashed #cbd5e1', borderRadius: '20px', color: '#64748b', fontSize: '16px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s' }}
                                                                 onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#94a3b8'; e.currentTarget.style.color = '#1e293b'; }}
                                                                 onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.color = '#64748b'; }}
