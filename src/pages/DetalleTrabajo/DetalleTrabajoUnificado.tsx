@@ -49,6 +49,7 @@ import ChatTrabajo from "../../components/ChatTrabajo";
 import NegotiationChatWidget from "../../components/chat/NegotiationChatWidget";
 import UbicacionMapaModal from "../../components/modals/UbicacionMapaModal";
 import { findMatchingSubReport } from "../../utils/reportUtils";
+import { generateMaintenanceReportPDF } from "../../utils/pdfGenerator";
 export interface CotizacionData {
     id?: number;
     costo: string;
@@ -4120,6 +4121,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 let pdfFile = null;
                 try {
                     const dynamicFolio = `COT-${trabajo.id.toString().padStart(5, '0')}-${idx + 1}`;
+                    const itemPhoto = item.foto || categorizedServicePoints[idx]?.foto || null;
                     pdfFile = await generateMaintenanceReportPDF({
                         id: trabajo.id,
                         folio: dynamicFolio,
@@ -4131,7 +4133,12 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         descripcion: `Propuesta: ${item.titulo || `Opción ${idx + 1}`}\n\n${item.notas || 'Mantenimiento preventivo/correctivo.'}`,
                         materiales: item.materials.filter(m => m.material.trim()).map(m => `- ${m.piezas || 1}x ${m.material} (${m.precio || 0})`).join('\n'),
                         observaciones: '',
-                        imagenes: {},
+                        imagenes: {
+                            antes: itemPhoto || (reporteFinal?.imagenes?.antes || null),
+                            durante: reporteFinal?.imagenes?.durante || null,
+                            despues: reporteFinal?.imagenes?.despues || null,
+                            extra: reporteFinal?.imagenesObservacion || null
+                        },
                         isVisita: true,
                         equipo: matchedEquip ? {
                             tipo: matchedEquip.nombre || 'Equipo',
@@ -4180,6 +4187,31 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     console.error("Error sending proposal message to chat:", chatErr);
                 }
             }
+
+            // Sincronizar cotizaciones desde backend para asegurar consistencia
+            try {
+                const refreshed = await getCotizacionesByTrabajoId(trabajo.id);
+                if (Array.isArray(refreshed) && refreshed.length > 0) {
+                    setCotizaciones(refreshed);
+                }
+            } catch (refErr) {
+                console.warn("Could not refresh cotizaciones list:", refErr);
+            }
+
+            // Notificación local de sincronización al cliente
+            try {
+                const clientNotifs = JSON.parse(localStorage.getItem('client_notifications') || '[]');
+                clientNotifs.unshift({
+                    id: Date.now(),
+                    titulo: 'Cotización Recibida',
+                    mensaje: `Ya tienes ${validItems.length} propuesta(s) de cotización para revisión (Trabajo #${trabajo.id}).`,
+                    fecha: new Date().toLocaleDateString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+                    leida: false,
+                    jobId: trabajo.id
+                });
+                localStorage.setItem('client_notifications', JSON.stringify(clientNotifs));
+                window.dispatchEvent(new Event('storage'));
+            } catch (notifErr) {}
 
             setCotizacionesFormItems([
                 { id: 'item_1', manoObra: '0', materials: [{ material: '', piezas: '', precio: '' }], notas: '', minimized: false }

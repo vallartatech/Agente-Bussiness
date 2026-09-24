@@ -31,12 +31,26 @@ export const getCotizacionByTrabajoId = getCotizacionesByTrabajoId;
 // ➕ Crear una nueva cotización
 export const saveCotizacion = async (data: Partial<Cotizacion> | FormData): Promise<Cotizacion> => {
     try {
-        // NOTE: Do NOT set Content-Type manually for FormData — Axios sets it
-        // automatically with the correct multipart/form-data boundary.
-        const response = await api.post('/cotizaciones', data);
-        return response.data.data;
+        let response;
+        if (data instanceof FormData) {
+            const hasFile = data.get('archivo') instanceof File;
+            if (!hasFile) {
+                const jsonPayload: Record<string, any> = {};
+                data.forEach((value, key) => {
+                    if (key !== 'archivo') {
+                        jsonPayload[key] = (key === 'monto' || key === 'trabajo_id') ? (isNaN(Number(value)) ? value : Number(value)) : value;
+                    }
+                });
+                response = await api.post('/cotizaciones', jsonPayload);
+            } else {
+                response = await api.post('/cotizaciones', data);
+            }
+        } else {
+            response = await api.post('/cotizaciones', data);
+        }
+        return response.data?.data || response.data;
     } catch (error: any) {
-        console.error('[saveCotizacion] error:', error?.response?.data);
+        console.error('[saveCotizacion] error:', error?.response?.data || error);
         throw error;
     }
 };
