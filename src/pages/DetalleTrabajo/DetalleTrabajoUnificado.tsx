@@ -996,6 +996,19 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
     // Modal PDF Preview
     const [showPDFPreview, setShowPDFPreview] = useState<boolean>(false);
+    const [pdfPreviewData, setPdfPreviewData] = useState<{
+        costo: string;
+        notas: string;
+        materials: any[];
+        manoObra: string;
+        titulo?: string;
+        propuestaIndex?: number;
+        categoria?: string;
+        equipo?: any;
+        fotos?: { url: string; label?: string }[];
+        isCombinado?: boolean;
+        itemsList?: any[];
+    } | null>(null);
     // const [isFromNewReq, setIsFromNewReq] = useState(false);
 
     // Historial Tab State
@@ -9123,10 +9136,49 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     <button
                                                                                         type="button"
                                                                                         onClick={() => {
+                                                                                            const itemMats = (item.materials || []).filter((m: any) => m && m.material && String(m.material).trim() !== '');
+                                                                                            const itemMatsTotal = itemMats.reduce((acc: number, m: any) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+                                                                                            const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
+
+                                                                                            const puntoIdx = item.puntoIndex || categorizedServicePoints[idx]?.puntoIndex || (idx + 1);
+                                                                                            const matchedPhotos: { url: string; label: string }[] = [];
+
+                                                                                            // Foto directa del punto o item
+                                                                                            const directPhoto = item.foto || categorizedServicePoints[idx]?.foto;
+                                                                                            if (directPhoto) {
+                                                                                                matchedPhotos.push({
+                                                                                                    url: directPhoto,
+                                                                                                    label: `Evidencia: ${itemCat ? `[${itemCat}] ` : ''}${item.titulo || `Punto #${puntoIdx}`}`
+                                                                                                });
+                                                                                            }
+
+                                                                                            // Fotos de allTechReportPhotos para este punto
+                                                                                            allTechReportPhotos.forEach(p => {
+                                                                                                if ((p.puntoIndex === puntoIdx || (p.category && itemCat && p.category.toLowerCase().includes(itemCat.toLowerCase()))) && !matchedPhotos.some(mp => mp.url === p.url)) {
+                                                                                                    matchedPhotos.push({ url: p.url, label: p.label });
+                                                                                                }
+                                                                                            });
+
+                                                                                            if (matchedPhotos.length === 0 && allTechReportPhotos[idx]) {
+                                                                                                matchedPhotos.push({ url: allTechReportPhotos[idx].url, label: allTechReportPhotos[idx].label });
+                                                                                            }
+
                                                                                             setAdminManoObra(item.manoObra);
-                                                                                            setAdminQuoteMaterials(item.materials);
+                                                                                            setAdminQuoteMaterials(itemMats);
                                                                                             setNotas(item.notas);
                                                                                             setCosto(String(itemTotal));
+                                                                                            setPdfPreviewData({
+                                                                                                costo: String(itemTotal),
+                                                                                                notas: item.notas,
+                                                                                                materials: itemMats,
+                                                                                                manoObra: item.manoObra,
+                                                                                                titulo: item.titulo || `Propuesta #${idx + 1}`,
+                                                                                                propuestaIndex: idx + 1,
+                                                                                                categoria: itemCat,
+                                                                                                equipo: itemEquip,
+                                                                                                fotos: matchedPhotos,
+                                                                                                isCombinado: false
+                                                                                            });
                                                                                             setShowPDFPreview(true);
                                                                                         }}
                                                                                         style={{ width: '100%', padding: '8px 12px', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b', borderRadius: '8px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
@@ -9146,18 +9198,55 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => {
-                                                                            const combinedMats = cotizacionesFormItems.flatMap(item => item.materials.filter(m => m.material.trim()));
-                                                                            const combinedManoObra = cotizacionesFormItems.reduce((sum, item) => sum + (parseFloat(item.manoObra) || 0), 0);
-                                                                            const combinedNotes = cotizacionesFormItems.map((item, idx) => item.notas ? `[Propuesta #${idx + 1}]: ${item.notas}` : '').filter(Boolean).join('\n\n');
-                                                                            const combinedTotal = cotizacionesFormItems.reduce((sum, item) => {
-                                                                                const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
-                                                                                return sum + (parseFloat(item.manoObra) || 0) + itemMatsTotal;
-                                                                            }, 0);
+                                                                            const combinedItems = cotizacionesFormItems.map((cItem, cIdx) => {
+                                                                                const cMats = (cItem.materials || []).filter((m: any) => m && m.material && String(m.material).trim() !== '');
+                                                                                const cMatsTotal = cMats.reduce((acc: number, m: any) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+                                                                                const cLabor = parseFloat(cItem.manoObra) || 0;
+                                                                                const cTotal = cLabor + cMatsTotal;
+
+                                                                                const cEquip = cItem.equip || categorizedServicePoints[cIdx]?.equip || (
+                                                                                    categorizedServicePoints.find(p => p.titulo && cItem.titulo && p.titulo.trim().toLowerCase() === cItem.titulo.trim().toLowerCase())?.equip
+                                                                                );
+                                                                                const cCat = cItem.categoria || categorizedServicePoints[cIdx]?.categoria || (
+                                                                                    categorizedServicePoints.find(p => p.titulo && cItem.titulo && p.titulo.trim().toLowerCase() === cItem.titulo.trim().toLowerCase())?.categoria
+                                                                                );
+                                                                                const cPhoto = cItem.foto || categorizedServicePoints[cIdx]?.foto;
+
+                                                                                return {
+                                                                                    id: cItem.id,
+                                                                                    idx: cIdx + 1,
+                                                                                    titulo: cItem.titulo || `Propuesta #${cIdx + 1}`,
+                                                                                    categoria: cCat,
+                                                                                    equipo: cEquip,
+                                                                                    manoObra: cItem.manoObra,
+                                                                                    materials: cMats,
+                                                                                    total: cTotal,
+                                                                                    notas: cItem.notas,
+                                                                                    foto: cPhoto
+                                                                                };
+                                                                            });
+
+                                                                            const combinedMats = combinedItems.flatMap(it => it.materials);
+                                                                            const combinedManoObra = combinedItems.reduce((sum, it) => sum + (parseFloat(it.manoObra) || 0), 0);
+                                                                            const combinedTotal = combinedItems.reduce((sum, it) => sum + it.total, 0);
+                                                                            const combinedNotes = combinedItems.map(it => it.notas ? `[${it.titulo}]: ${it.notas}` : '').filter(Boolean).join('\n\n');
+
+                                                                            const allPhotos = allTechReportPhotos.map(p => ({ url: p.url, label: p.label }));
 
                                                                             setAdminManoObra(String(combinedManoObra));
                                                                             setAdminQuoteMaterials(combinedMats);
                                                                             setNotas(combinedNotes);
                                                                             setCosto(String(combinedTotal));
+                                                                            setPdfPreviewData({
+                                                                                costo: String(combinedTotal),
+                                                                                notas: combinedNotes,
+                                                                                materials: combinedMats,
+                                                                                manoObra: String(combinedManoObra),
+                                                                                titulo: 'Cotización Integral de Servicio',
+                                                                                isCombinado: true,
+                                                                                itemsList: combinedItems,
+                                                                                fotos: allPhotos
+                                                                            });
                                                                             setShowPDFPreview(true);
                                                                         }}
                                                                         style={{ width: '100%', padding: '12px', background: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1e3a8a', borderRadius: '12px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' }}
@@ -13190,11 +13279,21 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 <CotizacionPDFPreview
                     trabajo={trabajo}
                     subTareas={subTareas}
-                    costo={costo}
-                    notas={notas}
-                    materials={adminQuoteMaterials}
-                    manoObra={adminManoObra}
-                    onClose={() => setShowPDFPreview(false)}
+                    costo={pdfPreviewData?.costo ?? costo}
+                    notas={pdfPreviewData?.notas ?? notas}
+                    materials={pdfPreviewData?.materials ?? adminQuoteMaterials}
+                    manoObra={pdfPreviewData?.manoObra ?? adminManoObra}
+                    titulo={pdfPreviewData?.titulo}
+                    propuestaIndex={pdfPreviewData?.propuestaIndex}
+                    categoria={pdfPreviewData?.categoria}
+                    equipo={pdfPreviewData?.equipo}
+                    fotos={pdfPreviewData?.fotos}
+                    isCombinado={pdfPreviewData?.isCombinado}
+                    itemsList={pdfPreviewData?.itemsList}
+                    onClose={() => {
+                        setShowPDFPreview(false);
+                        setPdfPreviewData(null);
+                    }}
                 />
             )}
 
