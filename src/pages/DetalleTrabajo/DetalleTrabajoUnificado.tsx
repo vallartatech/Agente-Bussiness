@@ -700,6 +700,10 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         materials: { material: string; piezas: string; precio: string }[];
         notas: string;
         minimized: boolean;
+        categoria?: string;
+        equip?: { nombre: string; marca?: string; modelo?: string; area?: string };
+        foto?: string;
+        puntoIndex?: number;
     }
 
     const [cotizacionesFormItems, setCotizacionesFormItems] = useState<CotizacionFormItem[]>([
@@ -4086,8 +4090,13 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
                 const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
 
+                const matchedEquip = item.equip || categorizedServicePoints[idx]?.equip || (
+                    categorizedServicePoints.find(p => p.titulo && item.titulo && p.titulo.trim().toLowerCase() === item.titulo.trim().toLowerCase())?.equip
+                );
+
                 const formattedMaterialsStr = item.materials.filter(m => m.material.trim()).map(m => `- ${m.material} (${m.piezas || 1}) - ${m.precio || 0}`).join('\n');
-                const fullDescription = `=== TÍTULO: ${item.titulo || `Propuesta #${idx + 1}`} ===\n\n- Mano de Obra / Servicio Técnico - ${item.manoObra}\n${formattedMaterialsStr}\n\n${item.notas}`;
+                const equipDescStr = matchedEquip ? `\n- Equipo: ${matchedEquip.nombre}${matchedEquip.marca ? ` (${matchedEquip.marca})` : ''}` : '';
+                const fullDescription = `=== TÍTULO: ${item.titulo || `Propuesta #${idx + 1}`} ===${equipDescStr}\n\n- Mano de Obra / Servicio Técnico - ${item.manoObra}\n${formattedMaterialsStr}\n\n${item.notas}`;
 
                 const formData = new FormData();
                 formData.append('trabajo_id', trabajo.id.toString());
@@ -4111,6 +4120,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         observaciones: '',
                         imagenes: {},
                         isVisita: true,
+                        equipo: matchedEquip ? {
+                            tipo: matchedEquip.nombre || 'Equipo',
+                            marca: matchedEquip.marca || '',
+                            modelo: matchedEquip.modelo || ''
+                        } : null,
                         refaccionesList: item.materials.filter(m => m.material.trim()).map(m => ({
                             pieza: m.material,
                             cantidad: m.piezas || '1',
@@ -4140,7 +4154,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
                 const token = localStorage.getItem('token');
                 try {
-                    const chatMessage = `PROPUESTA DE PRECIO INDIVIDUAL #${idx + 1} - ${item.titulo || 'Sin Título'}: ${itemTotal}\nNotas: ${item.notas || "Ninguna"}`;
+                    const chatMessage = `PROPUESTA DE PRECIO INDIVIDUAL #${idx + 1} - ${item.titulo || 'Sin Título'}: ${itemTotal}${matchedEquip ? ` (Equipo: ${matchedEquip.nombre})` : ''}\nNotas: ${item.notas || "Ninguna"}`;
                     await fetch(`${API_URL}/trabajos/${trabajo.id}/chat`, {
                         method: 'POST',
                         headers: {
@@ -8560,11 +8574,40 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                     </h3>
                                                                 </div>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                                    {subTareas.some(t => t.quoteData || t.esCotizacion) && (
+                                                                    {subTareas.some(t => t.quoteData || t.esCotizacion || t.serviceData) && (
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                const techTask = subTareas.find(t => t.quoteData || t.esCotizacion);
+                                                                                const techTask = subTareas.find(t => t.quoteData || t.esCotizacion || t.serviceData);
+                                                                                if (categorizedServicePoints && categorizedServicePoints.length > 0) {
+                                                                                    const mapped: CotizacionFormItem[] = categorizedServicePoints.map((pt, idx) => {
+                                                                                        const mats = (pt.materiales && pt.materiales.length > 0)
+                                                                                            ? pt.materiales.map((m: any) => ({
+                                                                                                material: m.nombre || m.material || '',
+                                                                                                piezas: String(m.cantidad || m.piezas || '1'),
+                                                                                                precio: String(m.precio || '0')
+                                                                                            }))
+                                                                                            : [{ material: '', piezas: '', precio: '' }];
+                                                                                        return {
+                                                                                            id: `item_${idx + 1}_${Date.now()}`,
+                                                                                            titulo: pt.titulo || `Punto ${idx + 1}`,
+                                                                                            manoObra: pt.manoObra > 0 ? String(pt.manoObra) : '0',
+                                                                                            materials: mats,
+                                                                                            notas: idx === 0 ? (techTask?.cotizacionNotas || techTask?.quoteData?.comentarios || '') : '',
+                                                                                            minimized: false,
+                                                                                            categoria: pt.categoria,
+                                                                                            equip: pt.equip,
+                                                                                            foto: pt.foto,
+                                                                                            puntoIndex: pt.puntoIndex
+                                                                                        };
+                                                                                    });
+                                                                                    if (mapped.length > 0) {
+                                                                                        setCotizacionesFormItems(mapped);
+                                                                                        showAlert('Datos Importados', `Se han cargado ${mapped.length} punto(s) del técnico con sus datos y equipos.`, 'success');
+                                                                                    }
+                                                                                    return;
+                                                                                }
+
                                                                                 if (techTask) {
                                                                                     const qData = techTask.quoteData;
                                                                                     const mapped: CotizacionFormItem[] = [];
@@ -8821,13 +8864,40 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                     const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
                                                                     const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
 
+                                                                    const itemEquip = item.equip || categorizedServicePoints[idx]?.equip || (
+                                                                        categorizedServicePoints.find(p => p.titulo && item.titulo && p.titulo.trim().toLowerCase() === item.titulo.trim().toLowerCase())?.equip
+                                                                    );
+                                                                    const itemCat = item.categoria || categorizedServicePoints[idx]?.categoria || (
+                                                                        categorizedServicePoints.find(p => p.titulo && item.titulo && p.titulo.trim().toLowerCase() === item.titulo.trim().toLowerCase())?.categoria
+                                                                    );
+                                                                    const isMantenimiento = Boolean(
+                                                                        (itemCat && itemCat.toLowerCase().includes('manten')) ||
+                                                                        itemEquip ||
+                                                                        (trabajo?.tipo?.toLowerCase().includes('manten') && idx === 0)
+                                                                    );
+
                                                                     return (
                                                                         <div key={item.id} style={{ background: '#fafafa', border: '1.5px solid #e2e8f0', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
                                                                             {/* Cabecera del item */}
                                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                                                                                <span style={{ fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
-                                                                                    Propuesta #{idx + 1}{item.titulo ? ` - ${item.titulo}` : ''}
-                                                                                </span>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                                    <span style={{ fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>
+                                                                                        Propuesta #{idx + 1}{item.titulo ? ` - ${item.titulo}` : ''}
+                                                                                    </span>
+                                                                                    {itemCat && (
+                                                                                        <span style={{
+                                                                                            fontSize: '11px',
+                                                                                            fontWeight: '850',
+                                                                                            color: itemCat.includes('Mantenimiento') ? '#1d4ed8' : (itemCat.includes('Plomería') ? '#c2410c' : '#4338ca'),
+                                                                                            background: itemCat.includes('Mantenimiento') ? '#eff6ff' : (itemCat.includes('Plomería') ? '#fff7ed' : '#eef2ff'),
+                                                                                            border: '1px solid currentColor',
+                                                                                            padding: '2px 8px',
+                                                                                            borderRadius: '10px'
+                                                                                        }}>
+                                                                                            {itemCat}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
                                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                                     <button
                                                                                         type="button"
@@ -8855,6 +8925,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                             {item.minimized ? (
                                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px', color: '#475569' }}>
                                                                                     {item.titulo && <span style={{ fontWeight: 'bold' }}>Título: {item.titulo}</span>}
+                                                                                    {isMantenimiento && itemEquip && (
+                                                                                        <span style={{ fontSize: '11.5px', color: '#1e40af', fontWeight: '600' }}>
+                                                                                            ⚙️ <strong>Equipo:</strong> {itemEquip.nombre} {itemEquip.marca ? `(${itemEquip.marca})` : ''}
+                                                                                        </span>
+                                                                                    )}
                                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                                         <span>Notas: {item.notas ? (item.notas.length > 30 ? `${item.notas.substring(0, 30)}...` : item.notas) : 'Sin notas'}</span>
                                                                                         <strong style={{ color: '#f26522', fontSize: '15px' }}>${(Number(itemTotal) || 0).toLocaleString('es-MX')}</strong>
@@ -8862,6 +8937,54 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                 </div>
                                                                             ) : (
                                                                                 <>
+                                                                                    {/* TARJETA DE EQUIPO DE MANTENIMIENTO (SOLO LECTURA / NO EDITABLE) */}
+                                                                                    {isMantenimiento && itemEquip && (
+                                                                                        <div style={{
+                                                                                            background: '#f8fafc',
+                                                                                            border: '1.5px solid #bfdbfe',
+                                                                                            borderRadius: '12px',
+                                                                                            padding: '12px 14px',
+                                                                                            marginBottom: '8px',
+                                                                                            display: 'flex',
+                                                                                            flexDirection: 'column',
+                                                                                            gap: '6px',
+                                                                                            boxShadow: '0 1px 3px rgba(37,99,235,0.05)'
+                                                                                        }}>
+                                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                                                                                <span style={{ fontSize: '11px', fontWeight: '900', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                                    ⚙️ Equipo en Mantenimiento Solicitado
+                                                                                                </span>
+                                                                                                <span style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '6px' }}>
+                                                                                                    Solo Lectura
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '12px', marginTop: '2px' }}>
+                                                                                                <div>
+                                                                                                    <span style={{ color: '#64748b', fontSize: '10px', fontWeight: '800', display: 'block' }}>EQUIPO:</span>
+                                                                                                    <strong style={{ color: '#0f172a' }}>{itemEquip.nombre || 'Equipo registrado'}</strong>
+                                                                                                </div>
+                                                                                                {itemEquip.marca && (
+                                                                                                    <div>
+                                                                                                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: '800', display: 'block' }}>MARCA:</span>
+                                                                                                        <strong style={{ color: '#0f172a' }}>{itemEquip.marca}</strong>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {itemEquip.modelo && (
+                                                                                                    <div>
+                                                                                                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: '800', display: 'block' }}>MODELO:</span>
+                                                                                                        <strong style={{ color: '#0f172a' }}>{itemEquip.modelo}</strong>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {itemEquip.area && (
+                                                                                                    <div>
+                                                                                                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: '800', display: 'block' }}>ÁREA:</span>
+                                                                                                        <strong style={{ color: '#0f172a' }}>{itemEquip.area}</strong>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+
                                                                                     {/* Detalle del item */}
                                                                                     <div style={{ marginBottom: '8px', width: '100%', boxSizing: 'border-box' }}>
                                                                                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Título de la Propuesta / Problema</label>
