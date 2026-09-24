@@ -4112,61 +4112,21 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 const equipDescStr = matchedEquip ? `\n- Equipo: ${matchedEquip.nombre}${matchedEquip.marca ? ` (${matchedEquip.marca})` : ''}` : '';
                 const fullDescription = `=== TÍTULO: ${item.titulo || `Propuesta #${idx + 1}`} ===${equipDescStr}\n\n- Mano de Obra / Servicio Técnico - ${item.manoObra}\n${formattedMaterialsStr}\n\n${item.notas}`;
 
-                const formData = new FormData();
-                formData.append('trabajo_id', trabajo.id.toString());
-                formData.append('monto', String(itemTotal));
-                formData.append('descripcion', fullDescription);
-                formData.append('estado', "Pendiente");
-
-                let pdfFile = null;
-                try {
-                    const dynamicFolio = `COT-${trabajo.id.toString().padStart(5, '0')}-${idx + 1}`;
-                    const itemPhoto = item.foto || categorizedServicePoints[idx]?.foto || null;
-                    pdfFile = await generateMaintenanceReportPDF({
-                        id: trabajo.id,
-                        folio: dynamicFolio,
-                        fecha: new Date().toLocaleDateString('es-MX'),
-                        sucursal: trabajo.sucursal || '---',
-                        encargado: trabajo.encargado || '---',
-                        tecnico: trabajo.tecnico || 'Técnico',
-                        diagnostico: trabajo.descripcion || 'Servicio solicitado.',
-                        descripcion: `Propuesta: ${item.titulo || `Opción ${idx + 1}`}\n\n${item.notas || 'Mantenimiento preventivo/correctivo.'}`,
-                        materiales: item.materials.filter(m => m.material.trim()).map(m => `- ${m.piezas || 1}x ${m.material} (${m.precio || 0})`).join('\n'),
-                        observaciones: '',
-                        imagenes: {
-                            antes: itemPhoto || (reporteFinal?.imagenes?.antes || null),
-                            durante: reporteFinal?.imagenes?.durante || null,
-                            despues: reporteFinal?.imagenes?.despues || null,
-                            extra: reporteFinal?.imagenesObservacion || null
-                        },
-                        isVisita: true,
-                        equipo: matchedEquip ? {
-                            tipo: matchedEquip.nombre || 'Equipo',
-                            marca: matchedEquip.marca || '',
-                            modelo: matchedEquip.modelo || ''
-                        } : null,
-                        refaccionesList: item.materials.filter(m => m.material.trim()).map(m => ({
-                            pieza: m.material,
-                            cantidad: m.piezas || '1',
-                            costo_estimado: m.precio || '0'
-                        }))
-                    }, true);
-                } catch (pdfErr) {
-                    console.error("Error generating PDF for item:", pdfErr);
-                }
-
-                if (pdfFile) {
-                    formData.append('archivo', pdfFile as any, (pdfFile as any).name || 'cotizacion.pdf');
-                }
+                const payload = {
+                    trabajo_id: Number(trabajo.id),
+                    monto: Number(itemTotal),
+                    descripcion: fullDescription,
+                    estado: "Pendiente"
+                };
 
                 // Debug: print what we're sending
-                console.log('[cotizacion masiva] monto:', itemTotal, 'trabajo_id:', trabajo.id, 'pdfFile:', pdfFile);
+                console.log(`[cotizacion masiva] Enviando propuesta #${idx + 1} de ${validItems.length}: monto:`, itemTotal, 'trabajo_id:', trabajo.id);
 
                 let savedCotiz: any;
                 try {
-                    savedCotiz = await saveCotizacion(formData as any);
+                    savedCotiz = await saveCotizacion(payload as any);
                 } catch (cotizErr: any) {
-                    console.error('[cotizacion masiva] 422 error detail:', cotizErr?.response?.data);
+                    console.error(`[cotizacion masiva] Error guardando propuesta #${idx + 1}:`, cotizErr?.response?.data || cotizErr);
                     throw cotizErr;
                 }
                 setCotizaciones(prev => [...prev, savedCotiz]);

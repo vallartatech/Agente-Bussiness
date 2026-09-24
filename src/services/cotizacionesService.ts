@@ -43,7 +43,18 @@ export const saveCotizacion = async (data: Partial<Cotizacion> | FormData): Prom
                 });
                 response = await api.post('/cotizaciones', jsonPayload);
             } else {
-                response = await api.post('/cotizaciones', data);
+                try {
+                    response = await api.post('/cotizaciones', data);
+                } catch (uploadErr) {
+                    console.warn('[saveCotizacion] Falló subida multipart, reintentando con payload JSON limpio:', uploadErr);
+                    const jsonPayload: Record<string, any> = {};
+                    data.forEach((value, key) => {
+                        if (key !== 'archivo') {
+                            jsonPayload[key] = (key === 'monto' || key === 'trabajo_id') ? (isNaN(Number(value)) ? value : Number(value)) : value;
+                        }
+                    });
+                    response = await api.post('/cotizaciones', jsonPayload);
+                }
             }
         } else {
             response = await api.post('/cotizaciones', data);

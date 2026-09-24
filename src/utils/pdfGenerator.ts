@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import logoImg from '../assets/imagenes/logo-agente-business.png';
 
 interface PDFReportData {
     id: number | string;
@@ -37,9 +38,7 @@ interface PDFReportData {
 
 // Función auxiliar para cargar imagen y retornar base64 (opcional, jsPDF puede manejar URLs si el server lo permite)
 const getLogoBase64 = (): string => {
-    // Por ahora usamos una ruta relativa o podemos inyectar un base64 si es necesario.
-    // Usaremos la ruta que encontramos en el proyecto.
-    return "/src/assets/imagenes/logo-agente-business.png";
+    return logoImg;
 };
 
 const getCleanNotes = (text: string) => {
