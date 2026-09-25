@@ -11324,19 +11324,79 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                         {isExpanded && (
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', paddingLeft: '15px', borderLeft: '2px solid #e2e8f0', marginLeft: '10px' }}>
                                                                 {tareasGroup.map(tarea => {
-                                                                    const hasTaskReport = tarea.estado === 'Completa' || !!localStorage.getItem(`report_data_${tarea.id}`) || trabajo.estado === 'Finalizado';
-                                                                    const isPreReport = !hasTaskReport && !!localStorage.getItem(`report_data_temporal_${tarea.id}`);
+                                                                    const matchingQuote = getMatchingQuoteForTask(tarea, cotizaciones);
+                                                                    const qId = matchingQuote?.id;
+                                                                    const storedRejectionReasons = (() => {
+                                                                        try { return JSON.parse(localStorage.getItem('cotiz_rejection_reasons') || '{}'); } catch { return {}; }
+                                                                    })();
+
+                                                                    const isQuoteRej = Boolean(
+                                                                        (matchingQuote && (matchingQuote.estado === 'Rechazada' || matchingQuote.estado === 'Cancelada')) ||
+                                                                        (qId && rejectionReasons && Boolean(rejectionReasons[qId])) ||
+                                                                        (qId && Boolean(storedRejectionReasons[qId])) ||
+                                                                        tarea.cotizacionEstado === 'Rechazada' ||
+                                                                        tarea.estado === 'Rechazada' ||
+                                                                        tarea.estado === 'Cancelada'
+                                                                    );
+
+                                                                    const isQuoteApproved = isTaskQuoteApproved(tarea, cotizaciones, rejectionReasons, recotizacionReasons);
+                                                                    const isRecotiz = !isQuoteRej && Boolean(
+                                                                        (qId && recotizacionReasons && Boolean(recotizacionReasons[qId])) ||
+                                                                        tarea.cotizacionEstado === 'Recotización Solicitada'
+                                                                    );
+
+                                                                    // Rechazada si se marcó como rechazada, o si el trabajo ya concluyó y este punto nunca fue aprobado/autorizado (no continuó)
+                                                                    const isRejected = isQuoteRej || (!isQuoteApproved && !isRecotiz && (trabajo.estado === 'Finalizado' || matchingQuote?.estado === 'Rechazada'));
+
+                                                                    const hasTaskReport = !isRejected && !isRecotiz && isQuoteApproved && (
+                                                                        tarea.estado === 'Completa' ||
+                                                                        !!localStorage.getItem(`report_data_${tarea.id}`) ||
+                                                                        (trabajo?.id && tarea.pointIndex && !!localStorage.getItem(`report_data_${trabajo.id}_${tarea.pointIndex}`)) ||
+                                                                        trabajo.estado === 'Finalizado'
+                                                                    );
+                                                                    const isPreReport = !isRejected && !isRecotiz && !hasTaskReport && (
+                                                                        !!localStorage.getItem(`report_data_temporal_${tarea.id}`) ||
+                                                                        (trabajo?.id && tarea.pointIndex && !!localStorage.getItem(`report_data_temporal_${trabajo.id}_${tarea.pointIndex}`))
+                                                                    );
+
+                                                                    const rejectionReasonText = (qId && rejectionReasons && rejectionReasons[qId]) ||
+                                                                        (qId && storedRejectionReasons[qId]) ||
+                                                                        matchingQuote?.motivoRechazo ||
+                                                                        matchingQuote?.motivo_rechazo ||
+                                                                        tarea?.motivoRechazo ||
+                                                                        tarea?.motivo_rechazo;
+
                                                                     return (
                                                                         <div
                                                                             key={tarea.id}
                                                                             className={historialStyles.card}
-                                                                            onClick={() => setSelectedHistoryTask(tarea)}
+                                                                            onClick={() => {
+                                                                                if (isRejected) {
+                                                                                    showAlert('Trabajo Rechazado', `Esta actividad no fue continuada debido a que su cotización fue rechazada${rejectionReasonText ? `: "${rejectionReasonText}"` : '.'}`, 'warning');
+                                                                                    return;
+                                                                                }
+                                                                                setSelectedHistoryTask(tarea);
+                                                                            }}
                                                                             style={{ cursor: 'pointer', marginBottom: '0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
                                                                         >
-                                                                            <div className={`${historialStyles.cardIndicator} ${historialStyles.borderSuccess}`} style={{ background: isPreReport ? '#ff9800' : (!hasTaskReport ? '#94a3b8' : undefined) }}></div>
+                                                                            <div
+                                                                                className={`${historialStyles.cardIndicator} ${!isRejected && !isPreReport && hasTaskReport ? historialStyles.borderSuccess : ''}`}
+                                                                                style={{ background: isRejected ? '#ef4444' : (isPreReport ? '#ff9800' : (!hasTaskReport ? '#94a3b8' : undefined)) }}
+                                                                            ></div>
                                                                             <div className={historialStyles.cardContent}>
-                                                                                <div className={historialStyles.cardIcon} style={{ background: isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined) }}>
-                                                                                    <span className={historialStyles.iconHistory} style={{ color: isPreReport ? '#e65100' : (!hasTaskReport ? '#94a3b8' : undefined) }}>📋</span>
+                                                                                <div
+                                                                                    className={historialStyles.cardIcon}
+                                                                                    style={{ background: isRejected ? '#fee2e2' : (isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined)) }}
+                                                                                >
+                                                                                    <span
+                                                                                        className={historialStyles.iconHistory}
+                                                                                        style={{
+                                                                                            color: isRejected ? '#dc2626' : (isPreReport ? '#e65100' : (!hasTaskReport ? '#94a3b8' : undefined)),
+                                                                                            fontSize: isRejected ? '24px' : undefined
+                                                                                        }}
+                                                                                    >
+                                                                                        {isRejected ? '❌' : (isPreReport ? '⚠️' : (hasTaskReport ? '📋' : '⏳'))}
+                                                                                    </span>
                                                                                 </div>
                                                                                 <div className={historialStyles.cardInfo}>
                                                                                     <div className={historialStyles.cardHeader}>
@@ -11380,8 +11440,19 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                                 </div>
                                                                                             )}
                                                                                         </div>
-                                                                                        <div className={`${historialStyles.statusBadge} ${historialStyles.badgeSuccess}`} style={{ background: isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined), color: isPreReport ? '#e65100' : (!hasTaskReport ? '#64748b' : undefined) }}>
-                                                                                            <span className={historialStyles.statusIcon}>{hasTaskReport ? '✓' : (isPreReport ? '⚠️' : '⏳')}</span> {hasTaskReport ? 'Completado' : (isPreReport ? 'Pre-Reporte' : 'Pendiente')}
+                                                                                        <div
+                                                                                            className={`${historialStyles.statusBadge} ${!isRejected && !isPreReport && hasTaskReport ? historialStyles.badgeSuccess : ''}`}
+                                                                                            style={{
+                                                                                                background: isRejected ? '#fef2f2' : (isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined)),
+                                                                                                color: isRejected ? '#dc2626' : (isPreReport ? '#e65100' : (!hasTaskReport ? '#64748b' : undefined)),
+                                                                                                border: isRejected ? '1px solid #fecaca' : undefined,
+                                                                                                fontWeight: isRejected ? '800' : undefined
+                                                                                            }}
+                                                                                        >
+                                                                                            <span className={historialStyles.statusIcon}>
+                                                                                                {isRejected ? '✕' : (hasTaskReport ? '✓' : (isPreReport ? '⚠️' : '⏳'))}
+                                                                                            </span>{' '}
+                                                                                            {isRejected ? 'Cotización Rechazada' : (hasTaskReport ? 'Completado' : (isPreReport ? 'Pre-Reporte' : 'Pendiente'))}
                                                                                         </div>
                                                                                     </div>
                                                                                     {(() => {
@@ -11396,6 +11467,23 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                         return (
                                                                                             <div style={{ marginTop: '4px' }}>
                                                                                                 {descText && <p className={historialStyles.descripcion} style={{ margin: 0, color: '#64748b' }}>{descText}</p>}
+                                                                                                {isRejected && rejectionReasonText && (
+                                                                                                    <div style={{
+                                                                                                        marginTop: '8px',
+                                                                                                        padding: '6px 12px',
+                                                                                                        background: '#fef2f2',
+                                                                                                        borderRadius: '8px',
+                                                                                                        fontSize: '12px',
+                                                                                                        color: '#991b1b',
+                                                                                                        border: '1px solid #fecaca',
+                                                                                                        display: 'inline-flex',
+                                                                                                        alignItems: 'center',
+                                                                                                        gap: '6px'
+                                                                                                    }}>
+                                                                                                        <span>🚫</span>
+                                                                                                        <span><strong>Motivo de rechazo:</strong> {rejectionReasonText}</span>
+                                                                                                    </div>
+                                                                                                )}
                                                                                                 {notasText && (
                                                                                                     <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '10px', fontSize: '12px', color: '#475569', border: '1px solid #e2e8f0' }}>
                                                                                                         <strong style={{ display: 'block', marginBottom: '4px', color: '#1e293b', fontSize: '11px', textTransform: 'uppercase' }}>📝 Notas de cotización</strong>

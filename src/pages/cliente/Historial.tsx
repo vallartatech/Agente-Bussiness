@@ -6,7 +6,7 @@ import { getTrabajos } from "../../services/trabajosService";
 import { getReporteByTrabajoId } from "../../services/reportesService";
 import { getActividadesByTrabajo } from "../../services/actividadesService";
 import ReporteDetailModal from "../../components/modals/ReporteDetailModal";
-import { findMatchingSubReport } from "../../utils/reportUtils";
+import { findMatchingSubReport, getMatchingQuoteForTask, isTaskQuoteApproved } from "../../utils/reportUtils";
 
 // Interfaz para la Tarea del Historial
 interface TareaHistorial {
@@ -810,22 +810,73 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                                                 {isExpanded && (
                                                     <div className={styles.groupContentList}>
                                                         {tareasGroup.map((tarea, index) => {
+                                                            const rawJob = tarea.rawJob;
+                                                            const rawCotizaciones = (rawJob?.cotizaciones && Array.isArray(rawJob.cotizaciones)) ? rawJob.cotizaciones : [];
+                                                            const matchingQuote = getMatchingQuoteForTask(tarea, rawCotizaciones);
+                                                            const qId = matchingQuote?.id;
+                                                            const storedRejectionReasons = (() => {
+                                                                try { return JSON.parse(localStorage.getItem('cotiz_rejection_reasons') || '{}'); } catch { return {}; }
+                                                            })();
+
+                                                            const isQuoteRej = Boolean(
+                                                                (matchingQuote && (matchingQuote.estado === 'Rechazada' || matchingQuote.estado === 'Cancelada')) ||
+                                                                (qId && Boolean(storedRejectionReasons[qId])) ||
+                                                                tarea.estado === 'Rechazada' ||
+                                                                tarea.estado === 'Cancelada'
+                                                            );
+
+                                                            const isQuoteApproved = isTaskQuoteApproved(tarea, rawCotizaciones, storedRejectionReasons);
+                                                            const isRejected = isQuoteRej || (!isQuoteApproved && (rawJob?.estado === 'Finalizado' || matchingQuote?.estado === 'Rechazada'));
+
                                                             const reportDataRaw = localStorage.getItem(`report_data_${tarea.id}`) || localStorage.getItem(`report_data_temporal_${tarea.id}`);
                                                             const reportData = reportDataRaw ? JSON.parse(reportDataRaw) : null;
-                                                            const hasTaskReport = tarea.estado === 'Completa' || tarea.estado === 'Completado' || !!localStorage.getItem(`report_data_${tarea.id}`);
-                                                            const isPreReport = !hasTaskReport && !!localStorage.getItem(`report_data_temporal_${tarea.id}`);
+                                                            const hasTaskReport = !isRejected && isQuoteApproved && (
+                                                                tarea.estado === 'Completa' ||
+                                                                tarea.estado === 'Completado' ||
+                                                                !!localStorage.getItem(`report_data_${tarea.id}`) ||
+                                                                (rawJob?.id && tarea.pointIndex && !!localStorage.getItem(`report_data_${rawJob.id}_${tarea.pointIndex}`)) ||
+                                                                rawJob?.estado === 'Finalizado'
+                                                            );
+                                                            const isPreReport = !isRejected && !hasTaskReport && (
+                                                                !!localStorage.getItem(`report_data_temporal_${tarea.id}`) ||
+                                                                (rawJob?.id && tarea.pointIndex && !!localStorage.getItem(`report_data_temporal_${rawJob.id}_${tarea.pointIndex}`))
+                                                            );
+
+                                                            const rejectionReasonText = (qId && storedRejectionReasons[qId]) ||
+                                                                matchingQuote?.motivoRechazo ||
+                                                                matchingQuote?.motivo_rechazo;
+
                                                             return (
                                                                 <div
                                                                     key={`${tarea.id}-${index}`}
                                                                     className={styles.card}
-                                                                    onClick={() => handleSelectTask(tarea)}
-                                                                    title="Haz clic para ver más detalles"
-                                                                    style={{ cursor: 'pointer', marginBottom: '0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
+                                                                    onClick={() => {
+                                                                        if (isRejected) {
+                                                                            return;
+                                                                        }
+                                                                        handleSelectTask(tarea);
+                                                                    }}
+                                                                    title={isRejected ? "Actividad rechazada" : "Haz clic para ver más detalles"}
+                                                                    style={{ cursor: isRejected ? 'default' : 'pointer', marginBottom: '0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
                                                                 >
-                                                                    <div className={`${styles.cardIndicator} ${styles.borderSuccess}`} style={{ background: isPreReport ? '#ff9800' : (!hasTaskReport ? '#94a3b8' : undefined) }}></div>
+                                                                    <div
+                                                                        className={`${styles.cardIndicator} ${!isRejected && !isPreReport && hasTaskReport ? styles.borderSuccess : ''}`}
+                                                                        style={{ background: isRejected ? '#ef4444' : (isPreReport ? '#ff9800' : (!hasTaskReport ? '#94a3b8' : undefined)) }}
+                                                                    ></div>
                                                                     <div className={styles.cardContent}>
-                                                                        <div className={styles.cardIcon} style={{ background: isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined) }}>
-                                                                            <span className={styles.iconHistory} style={{ color: isPreReport ? '#e65100' : (!hasTaskReport ? '#94a3b8' : undefined) }}>📋</span>
+                                                                        <div
+                                                                            className={styles.cardIcon}
+                                                                            style={{ background: isRejected ? '#fee2e2' : (isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined)) }}
+                                                                        >
+                                                                            <span
+                                                                                className={styles.iconHistory}
+                                                                                style={{
+                                                                                    color: isRejected ? '#dc2626' : (isPreReport ? '#e65100' : (!hasTaskReport ? '#94a3b8' : undefined)),
+                                                                                    fontSize: isRejected ? '24px' : undefined
+                                                                                }}
+                                                                            >
+                                                                                {isRejected ? '❌' : (isPreReport ? '⚠️' : (hasTaskReport ? '📋' : '⏳'))}
+                                                                            </span>
                                                                         </div>
 
                                                                         <div className={styles.cardInfo}>
@@ -870,8 +921,19 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                                                                                         </div>
                                                                                     )}
                                                                                 </div>
-                                                                                <div className={`${styles.statusBadge} ${styles.badgeSuccess}`} style={{ background: isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined), color: isPreReport ? '#e65100' : (!hasTaskReport ? '#64748b' : undefined) }}>
-                                                                                    <span className={styles.statusIcon}>{hasTaskReport ? '✓' : (isPreReport ? '⚠️' : '⏳')}</span> {hasTaskReport ? 'Completado' : (isPreReport ? 'Pre-Reporte' : 'Pendiente')}
+                                                                                <div
+                                                                                    className={`${styles.statusBadge} ${!isRejected && !isPreReport && hasTaskReport ? styles.badgeSuccess : ''}`}
+                                                                                    style={{
+                                                                                        background: isRejected ? '#fef2f2' : (isPreReport ? '#fff3e0' : (!hasTaskReport ? '#f1f5f9' : undefined)),
+                                                                                        color: isRejected ? '#dc2626' : (isPreReport ? '#e65100' : (!hasTaskReport ? '#64748b' : undefined)),
+                                                                                        border: isRejected ? '1px solid #fecaca' : undefined,
+                                                                                        fontWeight: isRejected ? '800' : undefined
+                                                                                    }}
+                                                                                >
+                                                                                    <span className={styles.statusIcon}>
+                                                                                        {isRejected ? '✕' : (hasTaskReport ? '✓' : (isPreReport ? '⚠️' : '⏳'))}
+                                                                                    </span>{' '}
+                                                                                    {isRejected ? 'Cotización Rechazada' : (hasTaskReport ? 'Completado' : (isPreReport ? 'Pre-Reporte' : 'Pendiente'))}
                                                                                 </div>
                                                                             </div>
                                                                             
@@ -893,6 +955,23 @@ const Historial: React.FC<HistorialProps> = ({ businessId }) => {
                                                                                 return (
                                                                                     <div style={{ marginTop: '4px' }}>
                                                                                         {descText && <p className={styles.descripcion} style={{ margin: 0, color: '#64748b' }}>{descText}</p>}
+                                                                                        {isRejected && rejectionReasonText && (
+                                                                                            <div style={{
+                                                                                                marginTop: '8px',
+                                                                                                padding: '6px 12px',
+                                                                                                background: '#fef2f2',
+                                                                                                borderRadius: '8px',
+                                                                                                fontSize: '12px',
+                                                                                                color: '#991b1b',
+                                                                                                border: '1px solid #fecaca',
+                                                                                                display: 'inline-flex',
+                                                                                                alignItems: 'center',
+                                                                                                gap: '6px'
+                                                                                            }}>
+                                                                                                <span>🚫</span>
+                                                                                                <span><strong>Motivo de rechazo:</strong> {rejectionReasonText}</span>
+                                                                                            </div>
+                                                                                        )}
                                                                                         {notasText && (
                                                                                             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '10px', fontSize: '12px', color: '#475569', border: '1px solid #e2e8f0' }}>
                                                                                                 <strong style={{ display: 'block', marginBottom: '4px', color: '#1e293b', fontSize: '11px', textTransform: 'uppercase' }}>📝 Notas de cotización</strong>
