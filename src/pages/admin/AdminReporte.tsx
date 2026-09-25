@@ -14,7 +14,7 @@ import {
     HiOutlinePlus
 } from 'react-icons/hi2';
 import ReportePDFPreview from '../../components/modals/ReportePDFPreview';
-import { findMatchingSubReport } from '../../utils/reportUtils';
+import { findMatchingSubReport, filterQuoteDataForPoint } from '../../utils/reportUtils';
 import { getNegocio } from '../../services/negociosService';
 
 const safeLocalStorageSet = (key: string, value: string) => {
@@ -329,13 +329,14 @@ const AdminReporte: React.FC = () => {
                             costo_estimado: String(r.costo_estimado || "")
                         }));
                     } else if (targetAct.quoteData?.conceptos || targetAct.quoteData?.materiales) {
-                        if (targetAct.quoteData?.conceptos) {
-                            targetAct.quoteData.conceptos.forEach((c: any) => {
+                        const qData = filterQuoteDataForPoint(targetAct.quoteData, pointIndex + 1);
+                        if (qData?.conceptos) {
+                            qData.conceptos.forEach((c: any) => {
                                 taskRefactions.push({ pieza: c.descripcion, cantidad: Number(c.cantidad) || 1, costo_estimado: String(c.precio || "") });
                             });
                         }
-                        if (targetAct.quoteData?.materiales) {
-                            targetAct.quoteData.materiales.forEach((m: any) => {
+                        if (qData?.materiales) {
+                            qData.materiales.forEach((m: any) => {
                                 taskRefactions.push({ pieza: m.nombre, cantidad: Number(m.cantidad) || 1, costo_estimado: String(m.precio || "") });
                             });
                         }
@@ -384,7 +385,7 @@ const AdminReporte: React.FC = () => {
                 }
                 const jobSol = jobData.mantenimiento_solicitud_visita || jobData.mantenimientoSolicitudVisita || jobData.mantenimiento_solicitud_reparacion || jobData.mantenimientoSolicitudReparacion;
                 if (jobSol?.levantamiento_equipo || jobSol?.levantamientoEquipo) {
-                    addEq(jobSol.levantamiento_equipo || jobSol.levantamientoEquipo);
+                    addEq(jobSol.levantamiento_equipo || jobSol?.levantamientoEquipo);
                 }
 
                 if (jobData.negocio_id) {
@@ -444,9 +445,17 @@ const AdminReporte: React.FC = () => {
                         try {
                             const parsed = JSON.parse(raw);
                             if (parsed && (parsed.isExecutionReport || parsed.isReportFinalizado || parsed.descripcion || parsed.imagenes)) {
-                                // Evitar cargar borradores temporales que pertenecían a otra subtarea o punto anterior
-                                if (subParam && parsed.subtareaId && parsed.subtareaId !== subParam && parsed.subtareaId !== `${safeId}_${pIdx}` && parsed.subtareaId !== `${targetAct?.id}_${pIdx}`) {
-                                    continue;
+                                // Evitar cargar borradores temporales que pertenecían a otra subtarea o punto anterior o al trabajo raíz
+                                if (subParam) {
+                                    if (!parsed.subtareaId && parsed.pointIndex === undefined) {
+                                        continue;
+                                    }
+                                    if (parsed.subtareaId && parsed.subtareaId !== subParam && parsed.subtareaId !== `${safeId}_${pIdx}` && parsed.subtareaId !== `${targetAct?.id}_${pIdx}`) {
+                                        continue;
+                                    }
+                                    if (parsed.pointIndex !== undefined && pIdx !== undefined && Number(parsed.pointIndex) !== Number(pIdx)) {
+                                        continue;
+                                    }
                                 }
                                 temporalData = raw;
                                 break;

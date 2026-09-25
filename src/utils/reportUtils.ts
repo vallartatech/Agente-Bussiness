@@ -88,3 +88,46 @@ export const findMatchingSubReport = (parsed: any, target: SubReportTarget): any
 
     return null;
 };
+
+/**
+ * Filtra conceptos y materiales de cotización para un punto específico
+ * evitando que todos los puntos muestren todos los conceptos y sumas acumuladas.
+ */
+export const filterQuoteDataForPoint = (quoteData: any, pIdx: number): any => {
+    if (!quoteData || typeof quoteData !== 'object') return quoteData;
+
+    const isMatch = (item: any) => {
+        if (!item) return false;
+        if (item.puntoIndex !== undefined && item.puntoIndex !== null) {
+            return Number(item.puntoIndex) === pIdx;
+        }
+        const desc = (item.descripcion || item.nombre || item.pieza || item.material || '').toString();
+        const pRegex = new RegExp(`\\[Punto\\s*#?${pIdx}\\]`, 'i');
+        return pRegex.test(desc);
+    };
+
+    const hasPointTags = (arr: any[]) => {
+        if (!Array.isArray(arr)) return false;
+        return arr.some(item => {
+            if (item.puntoIndex !== undefined && item.puntoIndex !== null) return true;
+            const desc = (item.descripcion || item.nombre || item.pieza || item.material || '').toString();
+            return /\[Punto\s*#?\d+\]/i.test(desc);
+        });
+    };
+
+    let conceptos = quoteData.conceptos;
+    if (Array.isArray(conceptos) && hasPointTags(conceptos)) {
+        conceptos = conceptos.filter(isMatch);
+    }
+
+    let materiales = quoteData.materiales;
+    if (Array.isArray(materiales) && hasPointTags(materiales)) {
+        materiales = materiales.filter(isMatch);
+    }
+
+    return {
+        ...quoteData,
+        conceptos: conceptos || [],
+        materiales: materiales || []
+    };
+};

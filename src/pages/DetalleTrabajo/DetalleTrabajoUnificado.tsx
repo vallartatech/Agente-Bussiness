@@ -48,7 +48,7 @@ import ReportePDFPreview, { parseWorkItems } from "../../components/modals/Repor
 import ChatTrabajo from "../../components/ChatTrabajo";
 import NegotiationChatWidget from "../../components/chat/NegotiationChatWidget";
 import UbicacionMapaModal from "../../components/modals/UbicacionMapaModal";
-import { findMatchingSubReport } from "../../utils/reportUtils";
+import { findMatchingSubReport, filterQuoteDataForPoint } from "../../utils/reportUtils";
 import { generateMaintenanceReportPDF } from "../../utils/pdfGenerator";
 export interface CotizacionData {
     id?: number;
@@ -478,6 +478,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                 const subDesc = item.descripcion || '';
                 const subPhoto = (t.photos && t.photos[idx]) ? [t.photos[idx]] : [];
                 const isReportDone = !!localStorage.getItem(`report_data_${subId}`);
+                const pointQuote = filterQuoteDataForPoint(t.quoteData, pIdx);
 
                 result.push({
                     ...t,
@@ -489,6 +490,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                     descripcion: subDesc,
                     cleanDescripcion: subDesc,
                     photos: subPhoto,
+                    quoteData: pointQuote,
                     estado: isReportDone ? 'Completa' : (t.estado === 'Pospuesto' ? 'Pospuesto' : 'Nueva'),
                     serviceData: {
                         ...t.serviceData,
@@ -517,6 +519,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                 const subDesc = m[3] ? m[3].trim() : '';
                 const subPhoto = (t.photos && t.photos[idx]) ? [t.photos[idx]] : [];
                 const isReportDone = !!localStorage.getItem(`report_data_${subId}`);
+                const pointQuote = filterQuoteDataForPoint(t.quoteData, pIdx);
 
                 result.push({
                     ...t,
@@ -528,6 +531,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                     descripcion: subDesc,
                     cleanDescripcion: subDesc,
                     photos: subPhoto,
+                    quoteData: pointQuote,
                     estado: isReportDone ? 'Completa' : (t.estado === 'Pospuesto' ? 'Pospuesto' : 'Nueva')
                 } as any);
             });
@@ -555,6 +559,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                 const subTipo = subData.equipoInfo?.tipo || subData.tipoServicio || (subData.reporteTienda ? subData.reporteTienda.split('(')[0].trim() : '') || t.titulo || 'Servicio';
                 const subDesc = subData.descripcion || subData.reporteTienda || '';
                 const subPhotos = subData.imagenes ? [subData.imagenes.antes, subData.imagenes.durante, subData.imagenes.despues].filter(Boolean) : [];
+                const pointQuote = filterQuoteDataForPoint(t.quoteData, pIdx);
 
                 result.push({
                     ...t,
@@ -566,6 +571,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                     descripcion: subDesc,
                     cleanDescripcion: subDesc,
                     photos: subPhotos,
+                    quoteData: pointQuote,
                     estado: 'Completa',
                     tecnicoNombre: subData.tecnicoNombre || t.tecnicoNombre,
                     serviceData: {
@@ -602,6 +608,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                 const subTipo = data.equipoInfo?.tipo || data.tipoServicio || (data.reporteTienda ? data.reporteTienda.split('(')[0].trim() : '') || t.titulo || 'Servicio';
                 const subDesc = data.descripcion || data.reporteTienda || '';
                 const subPhotos = data.imagenes ? [data.imagenes.antes, data.imagenes.durante, data.imagenes.despues].filter(Boolean) : [];
+                const pointQuote = filterQuoteDataForPoint(t.quoteData, pIdx);
 
                 result.push({
                     ...t,
@@ -613,6 +620,7 @@ export const getExecutableTasks = (tasks: SubTarea[], reporteFinal?: any, trabaj
                     descripcion: subDesc,
                     cleanDescripcion: subDesc,
                     photos: subPhotos,
+                    quoteData: pointQuote,
                     estado: 'Completa',
                     tecnicoNombre: data.tecnicoNombre || t.tecnicoNombre
                 } as any);
@@ -5230,6 +5238,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 try {
                     const parsed = JSON.parse(raw);
                     if (parsed && (parsed.isReportFinalizado || parsed.imagenes || parsed.descripcion || parsed.reporteTienda)) {
+                        if (pIdx !== undefined) {
+                            if (parsed.subtareaId && parsed.subtareaId !== tId && parsed.subtareaId !== `${workId}_${pIdx}` && parsed.subtareaId !== `${baseId}_${pIdx}`) {
+                                continue;
+                            }
+                            if (parsed.pointIndex !== undefined && Number(parsed.pointIndex) !== pIdx) {
+                                continue;
+                            }
+                        }
                         return true;
                     }
                 } catch (_) { }
@@ -5265,8 +5281,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         const candidateKeys = [
             `report_data_${tId}`,
             `report_data_temporal_${tId}`,
-            workId ? `report_data_${workId}_${tId}` : '',
-            workId ? `report_data_temporal_${workId}_${tId}` : '',
+            workId && tId !== String(workId) ? `report_data_${workId}_${tId}` : '',
+            workId && tId !== String(workId) ? `report_data_temporal_${workId}_${tId}` : '',
             baseId && pIdx !== undefined ? `report_data_${baseId}_${pIdx}` : '',
             baseId && pIdx !== undefined ? `report_data_temporal_${baseId}_${pIdx}` : '',
             workId && pIdx !== undefined ? `report_data_${workId}_${pIdx}` : '',
@@ -5279,8 +5295,19 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             const raw = localStorage.getItem(k);
             if (raw) {
                 try {
-                    taskReport = JSON.parse(raw);
-                    if (taskReport && (taskReport.imagenes || taskReport.observacionesList || taskReport.descripcion || taskReport.reporteTienda)) break;
+                    const parsed = JSON.parse(raw);
+                    if (parsed && (parsed.imagenes || parsed.observacionesList || parsed.descripcion || parsed.reporteTienda)) {
+                        if (pIdx !== undefined) {
+                            if (parsed.subtareaId && parsed.subtareaId !== tId && parsed.subtareaId !== `${workId}_${pIdx}` && parsed.subtareaId !== `${baseId}_${pIdx}`) {
+                                continue;
+                            }
+                            if (parsed.pointIndex !== undefined && Number(parsed.pointIndex) !== pIdx) {
+                                continue;
+                            }
+                        }
+                        taskReport = parsed;
+                        break;
+                    }
                 } catch (_) { }
             }
         }
