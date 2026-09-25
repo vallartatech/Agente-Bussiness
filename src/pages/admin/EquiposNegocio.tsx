@@ -80,7 +80,7 @@ export const isIntervencionForEquipo = (item: any, equipo: any): boolean => {
         if (matchNombre && matchModelo) return true;
     }
 
-    // 4. Revisar en reporte/solución parseada si contiene equipoInfo
+    // 4. Revisar en reporte/solución parseada si contiene equipoInfo o subReports
     const repSol = item.reporte?.solucion || item.solucion;
     if (repSol) {
         try {
@@ -94,6 +94,29 @@ export const isIntervencionForEquipo = (item: any, equipo: any): boolean => {
                 if (mSerie && mSerie.length > 2) return true;
                 if (mMarca && (mModelo || mNombre)) return true;
                 if (mNombre && mModelo) return true;
+            }
+            if (parsed.subReports && typeof parsed.subReports === 'object') {
+                for (const sub of Object.values(parsed.subReports) as any[]) {
+                    if (sub) {
+                        const subEq = sub.equipoInfo || sub.equipo;
+                        if (subEq) {
+                            const mMarca = subEq.marca && equipo.marca && String(subEq.marca).trim().toLowerCase() === String(equipo.marca).trim().toLowerCase();
+                            const mModelo = subEq.modelo && equipo.modelo && String(subEq.modelo).trim().toLowerCase() === String(equipo.modelo).trim().toLowerCase();
+                            const mNombre = subEq.nombre && equipo.nombre && String(subEq.nombre).trim().toLowerCase() === String(equipo.nombre).trim().toLowerCase();
+                            const mSerie = subEq.serie && equipo.serie && String(subEq.serie).trim().toLowerCase() === String(equipo.serie).trim().toLowerCase();
+                            if (mSerie && mSerie.length > 2) return true;
+                            if (mMarca && (mModelo || mNombre)) return true;
+                            if (mNombre && mModelo) return true;
+                        }
+                        const subText = `${sub.reporteTienda || ''} ${sub.titulo || ''} ${sub.hallazgo || ''}`.toLowerCase();
+                        const sMarca = String(equipo.marca || '').trim().toLowerCase();
+                        const sModelo = String(equipo.modelo || '').trim().toLowerCase();
+                        const sNombre = String(equipo.nombre || '').trim().toLowerCase();
+                        if (sMarca && sModelo && subText.includes(sMarca) && subText.includes(sModelo)) return true;
+                        if (sNombre && sModelo && subText.includes(sNombre) && subText.includes(sModelo)) return true;
+                        if (sNombre && sMarca && subText.includes(sNombre) && subText.includes(sMarca)) return true;
+                    }
+                }
             }
         } catch (_) {}
     }
