@@ -1426,7 +1426,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 // Si el trabajo quedó marcado como 'Cotización Aceptada' pero no tiene cotizaciones guardadas o aprobadas por cliente, restaurar a 'En Espera'
                 if (mappedJob && (mappedJob.estado === 'Cotización Aceptada' || mappedJob.estado === 'Cotización Aprobada')) {
                     try {
-                        const existingCotiz = await getCotizaciones(Number(id));
+                        const existingCotiz = await getCotizacionesByTrabajoId(Number(id));
                         const hasApprovedCotiz = Array.isArray(existingCotiz) && existingCotiz.some((c: any) => c.estado === 'Aprobada');
                         if (!hasApprovedCotiz && (!existingCotiz || existingCotiz.length === 0)) {
                             mappedJob.estado = 'En Espera';
@@ -1745,6 +1745,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             } catch (autoCotErr) {
                                 console.warn("Auto-creación de cotización SOS:", autoCotErr);
                             }
+                        }
+                    }
+
+                    // Auto-heal / Sincronización: si el trabajo ya está en 'Cotización Aceptada' o 'Cotización Aprobada' o 'En Ejecución', pero la cotización en BD está como 'Pendiente', sincronizar a 'Aprobada'
+                    if (['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución'].includes(data.estado) && cotizs.length > 0 && !cotizs.some((c: any) => c.estado === 'Aprobada')) {
+                        const firstCot = cotizs[0];
+                        try {
+                            await updateCotizacionStatus(firstCot.id!, 'Aprobada');
+                            firstCot.estado = 'Aprobada';
+                        } catch (errSync) {
+                            console.warn("Auto-sync cotización aprobada:", errSync);
+                            firstCot.estado = 'Aprobada';
                         }
                     }
 
@@ -4538,6 +4550,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 newDesc += `\n\n${ACCEPTED_ITEMS_MARKER}${JSON.stringify(acceptedItems)}`;
             }
 
+            // 1. Guardar estado 'Aprobada' en la cotización en backend
+            try {
+                await updateCotizacionStatus(cotizId, "Aprobada");
+            } catch (errStatus) {
+                console.warn("Error en updateCotizacionStatus:", errStatus);
+            }
+
+            // 2. Guardar monto y descripción (incluyendo desglose de items contratados)
             try {
                 await updateCotizacion(cotizId, {
                     estado: "Aprobada",
@@ -4545,10 +4565,10 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     descripcion: newDesc
                 });
             } catch (errUp) {
-                console.warn("Fallback to updateCotizacionStatus:", errUp);
-                await updateCotizacionStatus(cotizId, "Aprobada");
+                console.warn("Fallback to updateCotizacion:", errUp);
             }
 
+            // 3. Actualizar estado del trabajo a 'Cotización Aprobada'
             await updateEstadoTrabajo(trabajo.id, {
                 estado: "Cotización Aprobada",
                 cotizacion_aceptada: {
@@ -4557,13 +4577,22 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 }
             });
 
+            // 4. Limpiar técnico asignado en backend para que el Administrador pueda asignar al técnico de ejecución
+            try {
+                await updateTrabajo(trabajo.id, {
+                    trabajador_id: null
+                });
+            } catch (errTech) {
+                console.warn("No se pudo limpiar trabajador_id:", errTech);
+            }
+
             if (acceptedItems && acceptedItems.length > 0) {
                 localStorage.setItem(`quote_accepted_items_${cotizId}`, JSON.stringify(acceptedItems));
                 localStorage.setItem(`quote_accepted_items_${trabajo.id}`, JSON.stringify(acceptedItems));
             }
 
             setCotizaciones(prev => prev.map(c => c.id === cotizId ? { ...c, estado: "Aprobada" as const, monto: String(finalMonto), descripcion: newDesc } : c));
-            setTrabajo((prev: any) => prev ? { ...prev, estado: "Cotización Aprobada" } : prev);
+            setTrabajo((prev: any) => prev ? { ...prev, estado: "Cotización Aprobada", tecnico: "Sin Asignar", trabajador_id: null } : prev);
             // Notificar al Admin y al Técnico
             try {
                 await createNotificacionByRole({
@@ -6675,22 +6704,26 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                         <span style={{ fontSize: '14px', fontWeight: '800', color: (!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id) ? '#ef4444' : '#059669', wordBreak: 'break-word' }}>
                                                             {trabajo.tecnico && trabajo.tecnico !== 'Sin asignar' ? trabajo.tecnico : 'Sin Asignar'}
                                                         </span>
-                                                        {(!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id) && (user?.role === 'admin' || user?.role === 'autonomo' || user?.role === 'gerente-general') && (
+                                                        {(user?.role === 'admin' || user?.role === 'autonomo' || user?.role === 'gerente-general' || user?.role === 'admin-autonomo') && (
                                                             <button
                                                                 onClick={handleOpenAssignModal}
                                                                 style={{
-                                                                    padding: '4px 10px',
-                                                                    background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+                                                                    padding: '5px 12px',
+                                                                    background: (!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id)
+                                                                        ? 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'
+                                                                        : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                                                                     color: 'white',
                                                                     border: 'none',
                                                                     borderRadius: '8px',
                                                                     fontSize: '11px',
                                                                     fontWeight: '800',
                                                                     cursor: 'pointer',
-                                                                    boxShadow: '0 2px 6px rgba(59, 130, 246, 0.3)'
+                                                                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)'
                                                                 }}
                                                             >
-                                                                👤 Asignar Técnico
+                                                                {(!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id)
+                                                                    ? '👤 Asignar Técnico'
+                                                                    : '🔁 Cambiar Técnico'}
                                                             </button>
                                                         )}
                                                     </div>
@@ -7277,7 +7310,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                     </div>
                                                 ) : null
                                         ) : (
-                                            // FLUJO NORMAL: solo mostrar botón asignar si aún no hay técnico asignado/aceptado
+                                            // FLUJO NORMAL: mostrar botón asignar si aún no hay técnico asignado/aceptado, o botón reasignar si ya hay uno
                                             (!trabajo.tecnico || trabajo.tecnico === 'Sin asignar' || trabajo.tecnico === 'Sin Asignar' || !trabajo.trabajador_id) && !['Finalizado', 'Completado', 'Cancelado'].includes(trabajo.estado) ? (
                                                 <button
                                                     onClick={handleOpenAssignModal}
@@ -7306,8 +7339,36 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                     👤 Asignar Técnico
                                                 </button>
                                             ) : trabajo.tecnico && trabajo.tecnico !== 'Sin asignar' && trabajo.tecnico !== 'Sin Asignar' ? (
-                                                <div style={{ marginTop: '8px', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '25px', padding: '10px 20px', fontSize: '13px', fontWeight: '700', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
-                                                    ✅ Técnico: {trabajo.tecnico}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '8px' }}>
+                                                    <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '25px', padding: '10px 20px', fontSize: '13px', fontWeight: '700', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
+                                                        ✅ Técnico: {trabajo.tecnico}
+                                                    </div>
+                                                    {!['Finalizado', 'Completado', 'Cancelado'].includes(trabajo.estado) && (user?.role === 'admin' || user?.role === 'autonomo' || user?.role === 'gerente-general' || user?.role === 'admin-autonomo') && (
+                                                        <button
+                                                            onClick={handleOpenAssignModal}
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '6px',
+                                                                background: '#fff',
+                                                                color: '#2563eb',
+                                                                border: '1.5px solid #bfdbfe',
+                                                                padding: '8px 16px',
+                                                                borderRadius: '20px',
+                                                                fontSize: '12px',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease',
+                                                                width: '100%',
+                                                                justifyContent: 'center',
+                                                                boxShadow: '0 2px 6px rgba(37, 99, 235, 0.08)'
+                                                            }}
+                                                            onMouseEnter={e => (e.currentTarget.style.background = '#eff6ff')}
+                                                            onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+                                                        >
+                                                            🔁 Cambiar / Asignar Técnico
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : null
                                         )
