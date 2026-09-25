@@ -1,6 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from "react-dom";
-import { HiOutlineCalendarDays, HiOutlineWrenchScrewdriver, HiOutlineCheckCircle, HiChevronDown, HiChevronUp, HiOutlineClipboardDocumentList, HiOutlineCube } from "react-icons/hi2";
+import { 
+    HiOutlineCalendarDays, 
+    HiOutlineWrenchScrewdriver, 
+    HiOutlineCheckCircle, 
+    HiChevronDown, 
+    HiChevronUp, 
+    HiOutlineClipboardDocumentList, 
+    HiOutlineCube,
+    HiOutlinePhoto,
+    HiOutlineUser
+} from "react-icons/hi2";
+import { getReporteByTrabajoId } from '../../services/reportesService';
 
 interface HistorialEquipoModalProps {
     isOpen: boolean;
@@ -12,8 +23,10 @@ interface HistorialEquipoModalProps {
 
 const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onClose, equipo, historial, onViewReport }) => {
     const [expandedIds, setExpandedIds] = useState<number[]>([]);
+    const [loadedReports, setLoadedReports] = useState<Record<number, any>>({});
+    const [selectedZoomPhoto, setSelectedZoomPhoto] = useState<string | null>(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (isOpen && equipo) {
             document.body.style.overflow = 'hidden';
         } else {
@@ -24,12 +37,164 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
         };
     }, [isOpen, equipo]);
 
+    // Fetch / recuperar reportes de DB y localStorage para todos los trabajos en el historial
+    useEffect(() => {
+        if (!isOpen || !historial || historial.length === 0) return;
+
+        const idsToFetch = new Set<number>();
+        historial.forEach(req => {
+            const possibleIds = [
+                req.actualTrabajoId,
+                req.reparacion_trabajo_id,
+                req.visita_trabajo_id,
+                req.reparacion_trabajo?.id,
+                req.visita_trabajo?.id,
+                req.original_id,
+                req.id
+            ];
+            possibleIds.forEach(idVal => {
+                if (idVal) {
+                    const cleanNum = Number(String(idVal).replace('m-', '').replace('gen-', ''));
+                    if (!isNaN(cleanNum) && cleanNum > 0) {
+                        idsToFetch.add(cleanNum);
+                    }
+                }
+            });
+        });
+
+        // 1. Carga inmediata desde LocalStorage
+        const localInitial: Record<number, any> = {};
+        idsToFetch.forEach(jobId => {
+            const localRaw = localStorage.getItem(`report_data_${jobId}`);
+            if (localRaw) {
+                try {
+                    localInitial[jobId] = JSON.parse(localRaw);
+                } catch (_) {}
+            }
+        });
+        if (Object.keys(localInitial).length > 0) {
+            setLoadedReports(prev => ({ ...prev, ...localInitial }));
+        }
+
+        // 2. Carga asíncrona desde Backend
+        const fetchBackendReports = async () => {
+            const results: Record<number, any> = {};
+            for (const jobId of Array.from(idsToFetch)) {
+                try {
+                    const dbRep = await getReporteByTrabajoId(jobId);
+                    if (dbRep && dbRep.solucion) {
+                        const parsed = typeof dbRep.solucion === 'string' ? JSON.parse(dbRep.solucion) : dbRep.solucion;
+                        results[jobId] = { ...parsed, dbId: dbRep.id, dbDescripcion: dbRep.descripcion };
+                    }
+                } catch (_) {}
+            }
+            if (Object.keys(results).length > 0) {
+                setLoadedReports(prev => ({ ...prev, ...results }));
+            }
+        };
+
+        fetchBackendReports();
+    }, [isOpen, historial]);
+
     if (!isOpen || !equipo) return null;
 
     const toggleExpand = (index: number) => {
         setExpandedIds(prev =>
             prev.includes(index) ? prev.filter(id => id !== index) : [...prev, index]
         );
+    };
+
+    const extractReportsForItem = (req: any) => {
+        const rawList: any[] = [...(req.reportes || [])];
+
+        const jobIds = [
+            req.actualTrabajoId,
+            req.reparacion_trabajo_id,
+            req.visita_trabajo_id,
+            req.reparacion_trabajo?.id,
+            req.visita_trabajo?.id,
+            req.original_id,
+            req.id
+        ].map(idVal => idVal ? Number(String(idVal).replace('m-', '').replace('gen-', '')) : null)
+        .filter((id): id is number => id !== null && !isNaN(id) && id > 0);
+
+        const candidateReports: any[] = [];
+
+        // 1. Desde loadedReports (DB / localStorage)
+        jobIds.forEach(jId => {
+            if (loadedReports[jId]) {
+                candidateReports.push({ sourceJobId: jId, data: loadedReports[jId] });
+            }
+        });
+
+        // 2. Desde campos anidados en req
+        [req.visita_trabajo, req.reparacion_trabajo, req].forEach(t => {
+            if (t?.reporte?.solucion || t?.solucion) {
+                const rawSol = t.reporte?.solucion || t.solucion;
+                try {
+                    const parsed = typeof rawSol === 'string' ? JSON.parse(rawSol) : rawSol;
+                    candidateReports.push({ sourceJobId: t.id || req.actualTrabajoId || req.id, data: parsed });
+                } catch (_) {}
+            }
+        });
+
+        candidateReports.forEach(({ sourceJobId, data: p }) => {
+            if (!p) return;
+
+            // Si contiene subReports estructurados
+            if (p.subReports && typeof p.subReports === 'object') {
+                Object.entries(p.subReports).forEach(([subKey, subData]: [string, any]) => {
+                    if (subData && (subData.descripcion || subData.reporteTienda || subData.imagenes || subData.materiales)) {
+                        const piezas = Array.isArray(subData.refaccionesList)
+                            ? subData.refaccionesList.map((r: any) => `${r.cantidad || 1}x ${r.pieza || r.nombre || r.material}`).join(' · ')
+                            : '';
+                        
+                        rawList.push({
+                            id: sourceJobId,
+                            subId: subKey,
+                            titulo: subData.equipoInfo?.tipo || subData.tipoServicio || (subData.reporteTienda ? subData.reporteTienda.split('(')[0].trim() : '') || 'Intervención Técnica',
+                            problema_cliente: subData.reporteTienda || subData.hallazgo || req.descripcion_problema || req.descripcion || '—',
+                            trabajo_realizado: subData.descripcion || '—',
+                            materiales: subData.materiales || '',
+                            refacciones: piezas,
+                            imagenes: subData.imagenes || null,
+                            observacionesList: subData.observacionesList || [],
+                            tecnico: subData.tecnicoNombre || p.tecnicoNombre || req.tecnico?.name || 'Técnico asignado',
+                            fecha: subData.fecha || p.fecha || null
+                        });
+                    }
+                });
+            }
+
+            // Reporte único raíz
+            if (p.descripcion || p.reporteTienda || p.hallazgo || p.imagenes) {
+                const piezas = Array.isArray(p.refaccionesList)
+                    ? p.refaccionesList.map((r: any) => `${r.cantidad || 1}x ${r.pieza || r.nombre || r.material}`).join(' · ')
+                    : '';
+
+                rawList.push({
+                    id: sourceJobId,
+                    titulo: p.equipoInfo?.tipo || p.tipoServicio || 'Informe Técnico',
+                    problema_cliente: p.reporteTienda || p.hallazgo || req.descripcion_problema || req.descripcion || '—',
+                    trabajo_realizado: p.descripcion || p.reporteTienda || req.descripcion || '—',
+                    materiales: p.materiales || '',
+                    refacciones: piezas,
+                    imagenes: p.imagenes || null,
+                    observacionesList: p.observacionesList || [],
+                    tecnico: p.tecnicoNombre || req.tecnico?.name || 'Técnico asignado',
+                    fecha: p.fecha || null
+                });
+            }
+        });
+
+        // Deduplicación
+        const seen = new Set<string>();
+        return rawList.filter(r => {
+            const key = `${r.problema_cliente}-${r.trabajo_realizado}-${r.materiales}-${r.refacciones}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     };
 
     return createPortal(
@@ -85,12 +250,12 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', width: '100%' }}>
                             <div style={{ background: '#f8fafc', padding: '10px 15px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
                                 <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold' }}>NÚM. DE SERIE</span>
-                                <p style={{ margin: 0, fontWeight: '700', color: '#0f172a', fontSize: '14px' }}>{equipo.serie}</p>
+                                <p style={{ margin: 0, fontWeight: '700', color: '#0f172a', fontSize: '14px' }}>{equipo.serie || 'S/N'}</p>
                             </div>
                             <div style={{ background: '#f8fafc', padding: '10px 15px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
                                 <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold' }}>FABRICACIÓN / USO</span>
                                 <p style={{ margin: 0, fontWeight: '700', color: '#0f172a', fontSize: '14px' }}>
-                                    {equipo.anioFabricacion} <span style={{ color: '#cbd5e1' }}>/</span> {equipo.anioUso}
+                                    {equipo.anioFabricacion || 'N/A'} <span style={{ color: '#cbd5e1' }}>/</span> {equipo.anioUso || 'N/A'}
                                 </p>
                             </div>
                         </div>
@@ -115,54 +280,7 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                             {historial.map((req, idx) => {
                                 const isExpanded = expandedIds.includes(idx);
-
-                                // Extraer reportes en tiempo real del JSON anidado por si el mapping superior falló
-                                let rawReports = [...(req.reportes || [])];
-                                [req.visita_trabajo, req.reparacion_trabajo].forEach(t => {
-                                    if (t?.reporte?.solucion) {
-                                        try {
-                                            const p = typeof t.reporte.solucion === 'string' ? JSON.parse(t.reporte.solucion) : t.reporte.solucion;
-                                            if (p.descripcion || p.reporteTienda || p.hallazgo) {
-                                                rawReports.push({
-                                                    id: t.id,
-                                                    problema_cliente: p.reporteTienda || p.hallazgo || '—',
-                                                    trabajo_realizado: p.descripcion || '—',
-                                                    materiales: p.materiales || '',
-                                                    refacciones: Array.isArray(p.refaccionesList)
-                                                        ? p.refaccionesList.map((r: any) => `${r.cantidad}x ${r.pieza}`).join(' · ')
-                                                        : ''
-                                                });
-                                            }
-                                        } catch (e) { }
-                                    }
-                                });
-
-                                // Si el item es un trabajo con reporte propio
-                                if (req.reporte?.solucion || req.solucion) {
-                                    try {
-                                        const rawSol = req.reporte?.solucion || req.solucion;
-                                        const p = typeof rawSol === 'string' ? JSON.parse(rawSol) : rawSol;
-                                        if (p.descripcion || p.reporteTienda || p.hallazgo) {
-                                            rawReports.push({
-                                                id: req.id || req.original_id,
-                                                problema_cliente: p.reporteTienda || p.hallazgo || req.descripcion || '—',
-                                                trabajo_realizado: p.descripcion || req.descripcion || '—',
-                                                materiales: p.materiales || '',
-                                                refacciones: Array.isArray(p.refaccionesList)
-                                                    ? p.refaccionesList.map((r: any) => `${r.cantidad}x ${r.pieza}`).join(' · ')
-                                                    : ''
-                                            });
-                                        }
-                                    } catch (e) { }
-                                }
-
-                                const seenReports = new Set();
-                                const finalReports = rawReports.filter(r => {
-                                    const key = `${r.problema_cliente}-${r.trabajo_realizado}-${r.materiales}`;
-                                    if (seenReports.has(key)) return false;
-                                    seenReports.add(key);
-                                    return true;
-                                });
+                                const finalReports = extractReportsForItem(req);
 
                                 let displayEstado = req.estado;
                                 if (req.reparacion_trabajo && ['Finalizado', 'Completado'].includes(req.reparacion_trabajo.estado)) {
@@ -179,7 +297,7 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                     } else {
                                         try {
                                             const d = new Date(itemDate);
-                                            displayDate = isNaN(d.getTime()) ? String(itemDate) : d.toLocaleDateString('es-MX');
+                                            displayDate = isNaN(d.getTime()) ? String(itemDate) : d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                         } catch (_) {
                                             displayDate = String(itemDate);
                                         }
@@ -191,14 +309,14 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                         onClick={() => toggleExpand(idx)}
                                         style={{
                                             padding: '24px',
-                                            border: '1px solid #cbd5e1',
+                                            border: isExpanded ? '1.5px solid #f26522' : '1px solid #cbd5e1',
                                             borderRadius: '20px',
                                             background: '#ffffff',
                                             position: 'relative',
                                             overflow: 'hidden',
                                             cursor: 'pointer',
                                             transition: 'all 0.2s ease',
-                                            boxShadow: isExpanded ? '0 10px 25px -5px rgba(15, 23, 42, 0.05)' : 'none'
+                                            boxShadow: isExpanded ? '0 10px 25px -5px rgba(15, 23, 42, 0.08)' : '0 2px 8px rgba(0,0,0,0.02)'
                                         }}
                                         onMouseEnter={(e) => {
                                             e.currentTarget.style.borderColor = '#f26522';
@@ -237,134 +355,213 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                         {isExpanded && (
                                             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px dashed #cbd5e1' }}>
 
-                                                    {/* Detalle Técnico */}
-                                                    {!finalReports.length && (!req.visitas || req.visitas.length === 0) ? (
-                                                        <div style={{ textAlign: 'center', padding: '15px', background: '#f8fafc', borderRadius: '12px' }}>
-                                                            <span style={{ color: '#64748b', fontSize: '13px' }}>Aún no hay reportes técnicos finalizados para esta intervención.</span>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                                {(req.visitas && req.visitas.length > 0) && (
-                                                                    <div style={{ marginBottom: finalReports.length > 0 ? '15px' : '0' }}>
-                                                                        <p style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', marginBottom: '8px', letterSpacing: '0.5px' }}>INTERVENCIONES TÉCNICAS:</p>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                            {req.visitas.map((v: any, i: number) => (
-                                                                                <div key={i} style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'flex-start', gap: '8px', background: '#f8fafc', padding: '10px', borderRadius: '10px' }}>
-                                                                                    <HiOutlineCheckCircle style={{ color: '#10b981', flexShrink: 0, marginTop: '2px' }} />
-                                                                                    <div>
-                                                                                        <strong style={{ color: '#1e293b' }}>{v.tecnico?.name || 'Técnico'}</strong>
-                                                                                        <p style={{ margin: '4px 0 0', lineHeight: '1.4' }}>{v.reporte_solucion || 'Revisión técnica en proceso.'}</p>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ))}
+                                                {/* Detalle Técnico */}
+                                                {!finalReports.length && (!req.visitas || req.visitas.length === 0) ? (
+                                                    <div style={{ textAlign: 'center', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                                        <span style={{ color: '#64748b', fontSize: '13px', fontWeight: '600' }}>
+                                                            {displayEstado === 'Finalizado' ? 'Cargando información técnica de la bitácora...' : 'Aún no hay reportes técnicos finalizados para esta intervención.'}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                                        {(req.visitas && req.visitas.length > 0) && (
+                                                            <div>
+                                                                <p style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', marginBottom: '8px', letterSpacing: '0.5px' }}>INTERVENCIONES TÉCNICAS:</p>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {req.visitas.map((v: any, i: number) => (
+                                                                        <div key={i} style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'flex-start', gap: '8px', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                                                                            <HiOutlineCheckCircle style={{ color: '#10b981', flexShrink: 0, marginTop: '2px' }} />
+                                                                            <div>
+                                                                                <strong style={{ color: '#1e293b' }}>{v.tecnico?.name || 'Técnico'}</strong>
+                                                                                <p style={{ margin: '4px 0 0', lineHeight: '1.4' }}>{v.reporte_solucion || 'Revisión técnica en proceso.'}</p>
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                )}
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
 
-                                                                {(finalReports.length > 0) && (
-                                                                    <div>
-                                                                        <p style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', marginBottom: '8px', letterSpacing: '0.5px' }}>REPORTE TÉCNICO FORMAL:</p>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                            {finalReports.map((rep: any, i: number) => (
-                                                                                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                                    <div 
-                                                                                        onClick={(e) => {
-                                                                                            e.preventDefault();
-                                                                                            e.stopPropagation();
-                                                                                            const targetId = rep.id 
-                                                                                                || req.reparacion_trabajo?.id 
-                                                                                                || req.reparacion_trabajo_id 
-                                                                                                || req.visita_trabajo?.id 
-                                                                                                || req.visita_trabajo_id 
-                                                                                                || req.actualTrabajoId 
-                                                                                                || req.original_id
-                                                                                                || (req.isJob ? req.id : null);
-                                                                                            if (targetId) {
-                                                                                                onViewReport?.(Number(String(targetId).replace('m-', '').replace('gen-', '')));
-                                                                                            }
-                                                                                        }}
-                                                                                        style={{ fontSize: '13px', color: '#475569', cursor: 'pointer', transition: 'all 0.2s', position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '5px' }}
-                                                                                    >
-                                                                                        <p style={{ margin: '0', display: 'flex', gap: '8px' }}>
-                                                                                            <strong style={{ color: '#475569', minWidth: '130px', flexShrink: 0 }}>Problema reportado:</strong>
-                                                                                            <span style={{ color: '#334155' }}>{rep.problema_cliente}</span>
-                                                                                        </p>
-                                                                                        <p style={{ margin: '0', display: 'flex', gap: '8px' }}>
-                                                                                            <strong style={{ color: '#475569', minWidth: '130px', flexShrink: 0 }}>Trabajo realizado:</strong>
-                                                                                            <span style={{ color: '#334155' }}>{rep.trabajo_realizado}</span>
-                                                                                        </p>
-                                                                                        {rep.refacciones && (
-                                                                                            <p style={{ margin: '0', display: 'flex', gap: '8px' }}>
-                                                                                                <strong style={{ color: '#475569', minWidth: '130px', flexShrink: 0 }}>Piezas utilizadas:</strong>
-                                                                                                <span style={{ color: '#334155' }}>{rep.refacciones}</span>
-                                                                                            </p>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    {rep.materiales && (
-                                                                                        <div style={{ fontSize: '13px', padding: '12px 15px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #cbd5e1', display: 'flex', gap: '8px' }}>
-                                                                                            <strong style={{ color: '#475569', minWidth: '130px', flexShrink: 0 }}>Materiales usados:</strong>
-                                                                                            <span style={{ color: '#334155' }}>{rep.materiales}</span>
-                                                                                        </div>
+                                                        {(finalReports.length > 0) && (
+                                                            <div>
+                                                                <p style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', marginBottom: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                                                                    📋 Bitácora e Informe Técnico:
+                                                                </p>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                                                    {finalReports.map((rep: any, i: number) => {
+                                                                        const photoList: { label: string; url: string }[] = [];
+                                                                        if (rep.imagenes?.antes) photoList.push({ label: 'Antes', url: rep.imagenes.antes });
+                                                                        if (rep.imagenes?.durante) photoList.push({ label: 'Durante', url: rep.imagenes.durante });
+                                                                        if (rep.imagenes?.despues) photoList.push({ label: 'Después', url: rep.imagenes.despues });
+                                                                        if (Array.isArray(rep.observacionesList)) {
+                                                                            rep.observacionesList.forEach((obs: any, oIdx: number) => {
+                                                                                if (obs && Array.isArray(obs.imagenes)) {
+                                                                                    obs.imagenes.forEach((img: string, imgIdx: number) => {
+                                                                                        if (img) photoList.push({ label: `Obs ${oIdx + 1}.${imgIdx + 1}`, url: img });
+                                                                                    });
+                                                                                }
+                                                                            });
+                                                                        }
+
+                                                                        return (
+                                                                            <div key={i} style={{
+                                                                                background: '#f8fafc',
+                                                                                borderRadius: '14px',
+                                                                                border: '1px solid #e2e8f0',
+                                                                                padding: '16px',
+                                                                                display: 'flex',
+                                                                                flexDirection: 'column',
+                                                                                gap: '10px'
+                                                                            }}>
+                                                                                {/* Encabezado del reporte / título */}
+                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                                                                    <span style={{ fontSize: '12px', fontWeight: '850', color: '#0f172a', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '3px 10px', borderRadius: '12px' }}>
+                                                                                        🛠️ {rep.titulo || 'Mantenimiento Ejecutado'}
+                                                                                    </span>
+                                                                                    {rep.tecnico && (
+                                                                                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '750', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                                            <HiOutlineUser size={13} /> {rep.tecnico}
+                                                                                        </span>
                                                                                     )}
                                                                                 </div>
-                                                                            ))}
-                                                                        </div>
 
-                                                                        {/* BOTÓN PARA ABRIR EL MODAL DE DETALLES */}
-                                                                        {onViewReport && (
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={(e) => {
-                                                                                    e.preventDefault();
-                                                                                    e.stopPropagation();
-                                                                                    const rawTargetId = (finalReports.length > 0 && finalReports[finalReports.length - 1]?.id)
-                                                                                        || req.reparacion_trabajo?.id
-                                                                                        || req.reparacion_trabajo_id
-                                                                                        || req.visita_trabajo?.id
-                                                                                        || req.visita_trabajo_id
-                                                                                        || req.actualTrabajoId
-                                                                                        || req.original_id
-                                                                                        || (req.isJob || (!req.levantamiento_equipo_id && !req.reparacion_trabajo_id && !req.visita_trabajo_id) ? req.id : null);
-                                                                                    if (rawTargetId) {
-                                                                                        const targetId = Number(String(rawTargetId).replace('m-', '').replace('gen-', ''));
-                                                                                        onViewReport(targetId);
-                                                                                    }
-                                                                                }}
-                                                                                style={{
-                                                                                    width: '100%',
-                                                                                    marginTop: '15px',
-                                                                                    padding: '12px',
-                                                                                    background: 'linear-gradient(135deg, #f26522, #d14d13)',
-                                                                                    color: '#ffffff',
-                                                                                    border: 'none',
-                                                                                    borderRadius: '12px',
-                                                                                    fontWeight: '800',
-                                                                                    fontSize: '13px',
-                                                                                    cursor: 'pointer',
-                                                                                    display: 'flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    gap: '8px',
-                                                                                    boxShadow: '0 4px 12px rgba(254, 191, 1, 0.2)',
-                                                                                    transition: 'all 0.2s ease'
-                                                                                }}
-                                                                                onMouseEnter={(e) => {
-                                                                                    e.currentTarget.style.transform = 'translateY(-1px)';
-                                                                                    e.currentTarget.style.boxShadow = '0 6px 14px rgba(254, 191, 1, 0.3)';
-                                                                                }}
-                                                                                onMouseLeave={(e) => {
-                                                                                    e.currentTarget.style.transform = 'translateY(0)';
-                                                                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(254, 191, 1, 0.2)';
-                                                                                }}
-                                                                            >
-                                                                                <HiOutlineClipboardDocumentList size={18} />
-                                                                                Ver Reporte Detallado y PDF
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
+                                                                                {/* Problema diagnosticado */}
+                                                                                <div style={{ fontSize: '13px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                                    <strong style={{ color: '#0f172a', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Diagnóstico / Problema:</strong>
+                                                                                    <span style={{ color: '#334155', background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                                                                                        {rep.problema_cliente}
+                                                                                    </span>
+                                                                                </div>
+
+                                                                                {/* Trabajo técnico realizado */}
+                                                                                <div style={{ fontSize: '13px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                                    <strong style={{ color: '#0f172a', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trabajo Realizado:</strong>
+                                                                                    <span style={{ color: '#0f172a', fontWeight: '600', background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #f1f5f9', whiteSpace: 'pre-line' }}>
+                                                                                        {rep.trabajo_realizado}
+                                                                                    </span>
+                                                                                </div>
+
+                                                                                {/* Piezas y Refacciones */}
+                                                                                {rep.refacciones && (
+                                                                                    <div style={{ fontSize: '13px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                                        <strong style={{ color: '#15803d', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Piezas y Refacciones Utilizadas:</strong>
+                                                                                        <span style={{ color: '#166534', fontWeight: '700', background: '#f0fdf4', padding: '6px 12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                                                                                            {rep.refacciones}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                )}
+
+                                                                                {/* Materiales */}
+                                                                                {rep.materiales && (
+                                                                                    <div style={{ fontSize: '13px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                                        <strong style={{ color: '#0369a1', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Materiales Empleados:</strong>
+                                                                                        <span style={{ color: '#0c4a6e', fontWeight: '600', background: '#f0f9ff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                                                                                            {rep.materiales}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                )}
+
+                                                                                {/* Galería de fotos */}
+                                                                                {photoList.length > 0 && (
+                                                                                    <div style={{ marginTop: '4px' }}>
+                                                                                        <strong style={{ display: 'block', color: '#64748b', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                                                                            📷 Evidencia Fotográfica ({photoList.length}):
+                                                                                        </strong>
+                                                                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                                                            {photoList.map((p, pIdx) => (
+                                                                                                <div
+                                                                                                    key={pIdx}
+                                                                                                    onClick={(e) => { e.stopPropagation(); setSelectedZoomPhoto(p.url); }}
+                                                                                                    style={{
+                                                                                                        position: 'relative',
+                                                                                                        width: '58px',
+                                                                                                        height: '58px',
+                                                                                                        borderRadius: '8px',
+                                                                                                        overflow: 'hidden',
+                                                                                                        border: '1.5px solid #cbd5e1',
+                                                                                                        cursor: 'pointer',
+                                                                                                        boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+                                                                                                    }}
+                                                                                                >
+                                                                                                    <img src={p.url} alt={p.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                                                    <div style={{
+                                                                                                        position: 'absolute',
+                                                                                                        bottom: 0,
+                                                                                                        left: 0,
+                                                                                                        right: 0,
+                                                                                                        background: 'rgba(15, 23, 42, 0.75)',
+                                                                                                        color: '#ffffff',
+                                                                                                        fontSize: '8px',
+                                                                                                        fontWeight: '800',
+                                                                                                        textAlign: 'center',
+                                                                                                        padding: '1px 0'
+                                                                                                    }}>
+                                                                                                        {p.label}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+
+                                                                {/* BOTÓN PARA ABRIR EL MODAL DE DETALLES Y PDF */}
+                                                                {onViewReport && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            const rawTargetId = (finalReports.length > 0 && finalReports[0]?.id)
+                                                                                || req.actualTrabajoId
+                                                                                || req.reparacion_trabajo?.id
+                                                                                || req.reparacion_trabajo_id
+                                                                                || req.visita_trabajo?.id
+                                                                                || req.visita_trabajo_id
+                                                                                || req.original_id
+                                                                                || (req.isJob || (!req.levantamiento_equipo_id && !req.reparacion_trabajo_id && !req.visita_trabajo_id) ? req.id : null);
+                                                                            if (rawTargetId) {
+                                                                                const targetId = Number(String(rawTargetId).replace('m-', '').replace('gen-', ''));
+                                                                                onViewReport(targetId);
+                                                                            }
+                                                                        }}
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            marginTop: '15px',
+                                                                            padding: '12px',
+                                                                            background: 'linear-gradient(135deg, #f26522, #d14d13)',
+                                                                            color: '#ffffff',
+                                                                            border: 'none',
+                                                                            borderRadius: '12px',
+                                                                            fontWeight: '850',
+                                                                            fontSize: '13px',
+                                                                            cursor: 'pointer',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            gap: '8px',
+                                                                            boxShadow: '0 4px 12px rgba(242, 101, 34, 0.25)',
+                                                                            transition: 'all 0.2s ease'
+                                                                        }}
+                                                                        onMouseEnter={(e) => {
+                                                                            e.currentTarget.style.transform = 'translateY(-1px)';
+                                                                            e.currentTarget.style.boxShadow = '0 6px 14px rgba(242, 101, 34, 0.35)';
+                                                                        }}
+                                                                        onMouseLeave={(e) => {
+                                                                            e.currentTarget.style.transform = 'translateY(0)';
+                                                                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(242, 101, 34, 0.25)';
+                                                                        }}
+                                                                    >
+                                                                        <HiOutlineClipboardDocumentList size={18} />
+                                                                        Ver Reporte Detallado y PDF de Bitácora
+                                                                    </button>
                                                                 )}
-                                                        </>
-                                                    )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -374,6 +571,26 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                     )}
                 </div>
             </div>
+
+            {/* Modal de Zoom de Foto */}
+            {selectedZoomPhoto && (
+                <div 
+                    onClick={() => setSelectedZoomPhoto(null)}
+                    style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.85)', zIndex: 20000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '20px', cursor: 'zoom-out'
+                    }}
+                >
+                    <img 
+                        src={selectedZoomPhoto} 
+                        alt="Evidencia Zoom" 
+                        style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: '12px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }} 
+                    />
+                </div>
+            )}
+
             <style>{`
                 .modal-card-no-scrollbar {
                     scrollbar-width: none; /* Firefox */
@@ -427,3 +644,4 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
 };
 
 export default HistorialEquipoModal;
+
