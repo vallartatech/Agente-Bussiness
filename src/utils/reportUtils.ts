@@ -21,7 +21,7 @@ export const findMatchingSubReport = (parsed: any, target: SubReportTarget): any
         ? Number(target.pointIndex)
         : (subId.includes('_') ? Number(subId.split('_')[1]) : null);
 
-    const isSubPoint = Boolean((pIdx !== null && pIdx !== undefined && !isNaN(pIdx) && pIdx > 1) || subId.includes('_'));
+    const isSubPoint = Boolean((pIdx !== null && pIdx !== undefined && !isNaN(pIdx)) || subId.includes('_'));
 
     let match: any = null;
 
@@ -39,21 +39,11 @@ export const findMatchingSubReport = (parsed: any, target: SubReportTarget): any
         else if (subId && sr[subId]) match = sr[subId];
         // Búsqueda por clave de índice simple
         else if (pIdx && sr[String(pIdx)]) match = sr[String(pIdx)];
-        // Búsqueda por trabajoId o baseId simple
-        else if (trabajoId && sr[trabajoId]) match = sr[trabajoId];
-        else if (baseId && sr[baseId]) match = sr[baseId];
-
-        // Fallback inteligente en subReports:
-        if (!match) {
-            const srValues = Object.values(sr).filter(Boolean);
-            if (srValues.length === 1) {
-                // Si solo hay un sub-reporte registrado, ¡es ese!
-                match = srValues[0];
-            } else if (pIdx !== null && pIdx !== undefined && pIdx >= 1 && pIdx <= srValues.length) {
-                match = srValues[pIdx - 1];
-            } else if (!isSubPoint && srValues.length > 0) {
-                match = srValues[0];
-            }
+        else if (pIdx && sr[`pt_${pIdx}`]) match = sr[`pt_${pIdx}`];
+        // Búsqueda por clave que termine en el subId o índice
+        else if (pIdx) {
+            const entry = Object.entries(sr).find(([k]) => k.endsWith(`_${pIdx}`) || k === String(pIdx));
+            if (entry) match = entry[1];
         }
     }
 
@@ -65,18 +55,9 @@ export const findMatchingSubReport = (parsed: any, target: SubReportTarget): any
         else if (!isSubPoint && (parsed.subtareaId === trabajoId || parsed.subtareaId === baseId)) match = parsed;
     }
 
-    // 3. Fallback a nivel de trabajo general
-    if (!match) {
-        if (!isSubPoint || !parsed.subtareaId || parsed.subtareaId === subId || parsed.subtareaId === trabajoId) {
-            match = { ...parsed };
-            // Si el objeto raíz no tiene imágenes directamente pero tiene subReports, extraer datos del primer subReport
-            if ((!match.imagenes || (!match.imagenes.antes && !match.imagenes.durante && !match.imagenes.despues)) && parsed.subReports && typeof parsed.subReports === 'object') {
-                const srVals = Object.values(parsed.subReports);
-                if (srVals.length > 0 && typeof srVals[0] === 'object') {
-                    match = { ...(srVals[0] as object), ...match };
-                }
-            }
-        }
+    // 3. Fallback a nivel de trabajo general SOLO si NO es un sub-punto múltiple
+    if (!match && !isSubPoint) {
+        match = { ...parsed };
     }
 
     if (match) {
@@ -85,12 +66,12 @@ export const findMatchingSubReport = (parsed: any, target: SubReportTarget): any
         const matchFirma = match.firmaEmpresa && match.firmaEmpresa !== '__PDF_LOADED_IN_STATE__' ? match.firmaEmpresa : null;
 
         let imagenes = match.imagenes;
-        if ((!imagenes || (!imagenes.antes && !imagenes.durante && !imagenes.despues)) && parsed.imagenes) {
+        if (!imagenes && !isSubPoint && parsed.imagenes) {
             imagenes = parsed.imagenes;
         }
 
-        let equipoInfo = match.equipoInfo || parsed.equipoInfo || null;
-        let involucraEquipo = match.involucraEquipo !== undefined ? match.involucraEquipo : (parsed.involucraEquipo !== undefined ? parsed.involucraEquipo : Boolean(equipoInfo));
+        let equipoInfo = match.equipoInfo || (!isSubPoint ? parsed.equipoInfo : null) || null;
+        let involucraEquipo = match.involucraEquipo !== undefined ? match.involucraEquipo : Boolean(equipoInfo);
 
         match = {
             ...match,

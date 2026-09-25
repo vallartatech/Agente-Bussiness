@@ -5424,59 +5424,46 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             setShowActivityPDFPreview(true);
         };
 
-        // Combine photos from subTarea (visita / levantamiento) and taskReport (reporte de ejecución)
+        // Build distinct photo list: Execution photos if executed, or initial solicitation photos
         const photosListToRender: { label: string; url: string }[] = [];
-        const rawUrls: string[] = [];
 
-        // 1. Evidencia fotográfica tomada por el técnico para este punto/actividad (Fotos de Visita / Levantamiento)
-        if (tarea.photos && Array.isArray(tarea.photos) && tarea.photos.length > 0) {
-            tarea.photos.forEach((url) => {
-                if (url) rawUrls.push(url);
-            });
-        }
+        const hasExecutionPhotos = !!(taskReport && (
+            taskReport.imagenes?.antes ||
+            taskReport.imagenes?.durante ||
+            taskReport.imagenes?.despues ||
+            (Array.isArray(taskReport.observacionesList) && taskReport.observacionesList.some((o: any) => o?.imagenes && o.imagenes.length > 0)) ||
+            taskReport.imagenObservacion
+        ));
 
-        // 2. Si hay fotos del reporte de ejecución (Antes / Durante / Después / Observaciones) guardadas para esta tarea
-        if (taskReport) {
-            if (taskReport.imagenes?.antes) rawUrls.push(taskReport.imagenes.antes);
-            if (taskReport.imagenes?.durante) rawUrls.push(taskReport.imagenes.durante);
-            if (taskReport.imagenes?.despues) rawUrls.push(taskReport.imagenes.despues);
-
-            if (Array.isArray(taskReport.imagenes)) {
-                taskReport.imagenes.forEach((img: any) => {
-                    const u = typeof img === 'string' ? img : (img?.ruta || img?.url);
-                    if (u) rawUrls.push(u);
-                });
-            }
-            if (Array.isArray(taskReport.photos)) {
-                taskReport.photos.forEach((img: any) => {
-                    const u = typeof img === 'string' ? img : (img?.ruta || img?.url);
-                    if (u) rawUrls.push(u);
-                });
-            }
+        if (hasExecutionPhotos) {
+            // Mostrar fotos del reporte de ejecución (Antes, Durante, Después, Observaciones)
+            if (taskReport.imagenes?.antes) photosListToRender.push({ label: 'Antes', url: taskReport.imagenes.antes });
+            if (taskReport.imagenes?.durante) photosListToRender.push({ label: 'Durante', url: taskReport.imagenes.durante });
+            if (taskReport.imagenes?.despues) photosListToRender.push({ label: 'Después', url: taskReport.imagenes.despues });
 
             if (Array.isArray(taskReport.observacionesList)) {
-                taskReport.observacionesList.forEach((obs: any) => {
+                taskReport.observacionesList.forEach((obs: any, oIdx: number) => {
                     if (obs && Array.isArray(obs.imagenes)) {
-                        obs.imagenes.forEach((img: string) => {
-                            if (img) rawUrls.push(img);
+                        obs.imagenes.forEach((img: string, iIdx: number) => {
+                            if (img) photosListToRender.push({ label: `Obs ${oIdx + 1}.${iIdx + 1}`, url: img });
                         });
                     }
                 });
-            }
-
-            if (taskReport.imagenesObservacion && Array.isArray(taskReport.imagenesObservacion) && taskReport.imagenesObservacion.length > 0) {
-                taskReport.imagenesObservacion.forEach((img: string) => {
-                    if (img) rawUrls.push(img);
+            } else if (taskReport.imagenesObservacion && Array.isArray(taskReport.imagenesObservacion)) {
+                taskReport.imagenesObservacion.forEach((img: string, iIdx: number) => {
+                    if (img) photosListToRender.push({ label: `Obs ${iIdx + 1}`, url: img });
                 });
             } else if (taskReport.imagenObservacion) {
-                rawUrls.push(taskReport.imagenObservacion);
+                photosListToRender.push({ label: 'Obs', url: taskReport.imagenObservacion });
+            }
+        } else {
+            // Mostrar fotos de la solicitud / visita inicial de esta tarea
+            if (tarea.photos && Array.isArray(tarea.photos) && tarea.photos.length > 0) {
+                tarea.photos.forEach((url, idx) => {
+                    if (url) photosListToRender.push({ label: `Foto ${idx + 1}`, url });
+                });
             }
         }
-
-        const uniqueUrls = Array.from(new Set(rawUrls.filter(Boolean)));
-        uniqueUrls.forEach((url, idx) => {
-            photosListToRender.push({ label: `Foto ${idx + 1}`, url });
-        });
 
         const descText = tarea.descripcion || '';
         const parts = descText.split(/Notas de cotizaci[óo]n:\s*-?/i);
