@@ -1435,6 +1435,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     } catch (_) {}
                 }
 
+                // Cargar cotizaciones directamente en fetchAll
+                try {
+                    const allCotizs = await getCotizacionesByTrabajoId(Number(id));
+                    if (Array.isArray(allCotizs)) {
+                        setCotizaciones(allCotizs);
+                    }
+                } catch (_) {}
+
                 setTrabajo(mappedJob as any);
 
                 // Ajuste inteligente de pestaña según el estado del trabajo y rol
@@ -1749,7 +1757,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     }
 
                     // Auto-heal / Sincronización: si el trabajo ya está en 'Cotización Aceptada' o 'Cotización Aprobada' o 'En Ejecución', pero la cotización en BD está como 'Pendiente', sincronizar a 'Aprobada'
-                    if (['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución'].includes(data.estado) && cotizs.length > 0 && !cotizs.some((c: any) => c.estado === 'Aprobada')) {
+                    const currentJobStatus = trabajo?.estado;
+                    if (currentJobStatus && ['Cotización Aceptada', 'Cotización Aprobada', 'En Ejecución'].includes(currentJobStatus) && cotizs.length > 0 && !cotizs.some((c: any) => c.estado === 'Aprobada')) {
                         const firstCot = cotizs[0];
                         try {
                             await updateCotizacionStatus(firstCot.id!, 'Aprobada');
@@ -4146,99 +4155,127 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             return;
         }
 
-        setIsSendingQuote(true);
+        const executeSending = async (deletePendingOld: boolean = false) => {
+            setIsSendingQuote(true);
 
-        try {
-            const newState = "Cotización Enviada";
-            await updateEstadoTrabajo(trabajo.id, { estado: newState });
-            setTrabajo((prev: any) => prev ? { ...prev, estado: newState } : prev);
-
-            const savedList: any[] = [];
-            for (let idx = 0; idx < validItems.length; idx++) {
-                const item = validItems[idx];
-                const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
-                const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
-
-                const matchedEquip = item.equip || categorizedServicePoints[idx]?.equip || (
-                    categorizedServicePoints.find(p => p.titulo && item.titulo && p.titulo.trim().toLowerCase() === item.titulo.trim().toLowerCase())?.equip
-                );
-
-                const formattedMaterialsStr = item.materials.filter(m => m.material.trim()).map(m => `- ${m.material} (${m.piezas || 1}) - ${m.precio || 0}`).join('\n');
-                const equipDescStr = matchedEquip ? `\n- Equipo: ${matchedEquip.nombre}${matchedEquip.marca ? ` (${matchedEquip.marca})` : ''}` : '';
-                const fullDescription = `=== TÍTULO: ${item.titulo || `Propuesta #${idx + 1}`} ===${equipDescStr}\n\n- Mano de Obra / Servicio Técnico - ${item.manoObra}\n${formattedMaterialsStr}\n\n${item.notas}`;
-
-                const payload = {
-                    trabajo_id: Number(trabajo.id),
-                    monto: Number(itemTotal),
-                    descripcion: fullDescription,
-                    estado: "Pendiente"
-                };
-
-                // Debug: print what we're sending
-                console.log(`[cotizacion masiva] Enviando propuesta #${idx + 1} de ${validItems.length}: monto:`, itemTotal, 'trabajo_id:', trabajo.id);
-
-                try {
-                    const savedCotiz = await saveCotizacion(payload as any);
-                    if (savedCotiz) {
-                        savedList.push(savedCotiz);
-                        setCotizaciones(prev => [...prev, savedCotiz]);
+            try {
+                if (deletePendingOld) {
+                    const toDelete = cotizaciones.filter(c => (c.estado === 'Pendiente' || c.estado === 'Rechazada') && c.id);
+                    for (const prevQ of toDelete) {
+                        try {
+                            await deleteCotizacion(prevQ.id!);
+                        } catch (e) {
+                            console.warn("Error eliminando cotización anterior:", e);
+                        }
                     }
-                } catch (cotizErr: any) {
-                    console.error(`[cotizacion masiva] Error guardando propuesta #${idx + 1}:`, cotizErr?.response?.data || cotizErr);
                 }
 
-                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-                const token = localStorage.getItem('token');
+                const newState = "Cotización Enviada";
+                await updateEstadoTrabajo(trabajo.id, { estado: newState });
+                setTrabajo((prev: any) => prev ? { ...prev, estado: newState } : prev);
+
+                const savedList: any[] = [];
+                for (let idx = 0; idx < validItems.length; idx++) {
+                    const item = validItems[idx];
+                    const itemMatsTotal = item.materials.reduce((acc, m) => acc + ((parseFloat(m.precio) || 0) * (parseFloat(m.piezas) || 1)), 0);
+                    const itemTotal = (parseFloat(item.manoObra) || 0) + itemMatsTotal;
+
+                    const matchedEquip = item.equip || categorizedServicePoints[idx]?.equip || (
+                        categorizedServicePoints.find(p => p.titulo && item.titulo && p.titulo.trim().toLowerCase() === item.titulo.trim().toLowerCase())?.equip
+                    );
+
+                    const formattedMaterialsStr = item.materials.filter(m => m.material.trim()).map(m => `- ${m.material} (${m.piezas || 1}) - ${m.precio || 0}`).join('\n');
+                    const equipDescStr = matchedEquip ? `\n- Equipo: ${matchedEquip.nombre}${matchedEquip.marca ? ` (${matchedEquip.marca})` : ''}` : '';
+                    const fullDescription = `=== TÍTULO: ${item.titulo || `Propuesta #${idx + 1}`} ===${equipDescStr}\n\n- Mano de Obra / Servicio Técnico - ${item.manoObra}\n${formattedMaterialsStr}\n\n${item.notas}`;
+
+                    const payload = {
+                        trabajo_id: Number(trabajo.id),
+                        monto: Number(itemTotal),
+                        descripcion: fullDescription,
+                        estado: "Pendiente"
+                    };
+
+                    try {
+                        const savedCotiz = await saveCotizacion(payload as any);
+                        if (savedCotiz) {
+                            savedList.push(savedCotiz);
+                        }
+                    } catch (cotizErr: any) {
+                        console.error(`[cotizacion masiva] Error guardando propuesta #${idx + 1}:`, cotizErr?.response?.data || cotizErr);
+                    }
+
+                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+                    const token = localStorage.getItem('token');
+                    try {
+                        const chatMessage = `PROPUESTA DE PRECIO INDIVIDUAL #${idx + 1} - ${item.titulo || 'Sin Título'}: $${itemTotal}${matchedEquip ? ` (Equipo: ${matchedEquip.nombre})` : ''}\nNotas: ${item.notas || "Ninguna"}`;
+                        await fetch(`${API_URL}/trabajos/${trabajo.id}/chat`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ message: chatMessage, canal: 'cliente_admin' })
+                        });
+                    } catch (chatErr) {
+                        console.error("Error sending proposal message to chat:", chatErr);
+                    }
+                }
+
+                // Sincronizar cotizaciones desde backend para asegurar consistencia
                 try {
-                    const chatMessage = `PROPUESTA DE PRECIO INDIVIDUAL #${idx + 1} - ${item.titulo || 'Sin Título'}: $${itemTotal}${matchedEquip ? ` (Equipo: ${matchedEquip.nombre})` : ''}\nNotas: ${item.notas || "Ninguna"}`;
-                    await fetch(`${API_URL}/trabajos/${trabajo.id}/chat`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ message: chatMessage, canal: 'cliente_admin' })
+                    const refreshed = await getCotizacionesByTrabajoId(trabajo.id);
+                    if (Array.isArray(refreshed)) {
+                        setCotizaciones(refreshed);
+                    }
+                } catch (refErr) {
+                    console.warn("Could not refresh cotizaciones list:", refErr);
+                    if (deletePendingOld) {
+                        setCotizaciones(savedList);
+                    } else {
+                        setCotizaciones(prev => [...prev, ...savedList]);
+                    }
+                }
+
+                // Notificación local de sincronización al cliente
+                try {
+                    const clientNotifs = JSON.parse(localStorage.getItem('client_notifications') || '[]');
+                    clientNotifs.unshift({
+                        id: Date.now(),
+                        titulo: 'Cotización Recibida',
+                        mensaje: `Ya tienes ${savedList.length} propuesta(s) de cotización para revisión (Trabajo #${trabajo.id}).`,
+                        fecha: new Date().toLocaleDateString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+                        leida: false,
+                        jobId: trabajo.id
                     });
-                } catch (chatErr) {
-                    console.error("Error sending proposal message to chat:", chatErr);
-                }
+                    localStorage.setItem('client_notifications', JSON.stringify(clientNotifs));
+                    window.dispatchEvent(new Event('storage'));
+                } catch (notifErr) {}
+
+                setCotizacionesFormItems([
+                    { id: 'item_1', manoObra: '0', materials: [{ material: '', piezas: '', precio: '' }], notas: '', minimized: false }
+                ]);
+                setShowAddQuoteForm(false);
+
+                showAlert('Cotización Enviada', `Se ha enviado la cotización al cliente exitosamente.`, 'success');
+            } catch (error: any) {
+                showAlert('Error', error.response?.data?.message || error.message, 'error');
+            } finally {
+                setIsSendingQuote(false);
             }
+        };
 
-            // Sincronizar cotizaciones desde backend para asegurar consistencia
-            try {
-                const refreshed = await getCotizacionesByTrabajoId(trabajo.id);
-                if (Array.isArray(refreshed) && refreshed.length > 0) {
-                    setCotizaciones(refreshed);
-                }
-            } catch (refErr) {
-                console.warn("Could not refresh cotizaciones list:", refErr);
-            }
-
-            // Notificación local de sincronización al cliente
-            try {
-                const clientNotifs = JSON.parse(localStorage.getItem('client_notifications') || '[]');
-                clientNotifs.unshift({
-                    id: Date.now(),
-                    titulo: 'Cotización Recibida',
-                    mensaje: `Ya tienes ${savedList.length} propuesta(s) de cotización para revisión (Trabajo #${trabajo.id}).`,
-                    fecha: new Date().toLocaleDateString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-                    leida: false,
-                    jobId: trabajo.id
-                });
-                localStorage.setItem('client_notifications', JSON.stringify(clientNotifs));
-                window.dispatchEvent(new Event('storage'));
-            } catch (notifErr) {}
-
-            setCotizacionesFormItems([
-                { id: 'item_1', manoObra: '0', materials: [{ material: '', piezas: '', precio: '' }], notas: '', minimized: false }
-            ]);
-            setShowAddQuoteForm(false);
-
-            showAlert('Cotizaciones Enviadas', `Se han guardado exitosamente ${savedList.length} propuesta(s) de cotización en la base de datos.`, 'success');
-        } catch (error: any) {
-            showAlert('Error', error.response?.data?.message || error.message, 'error');
-        } finally {
-            setIsSendingQuote(false);
+        const existingPending = cotizaciones.filter(c => (c.estado === 'Pendiente' || c.estado === 'Rechazada') && c.id);
+        if (existingPending.length > 0) {
+            showConfirm(
+                '¿Reemplazar o Agregar Opción?',
+                `Ya tienes ${existingPending.length} propuesta(s) previa(s). ¿Deseas reemplazar la(s) propuesta(s) anterior(es) con esta nueva cotización, o agregarla como una opción adicional para el cliente?`,
+                () => executeSending(true),
+                () => executeSending(false),
+                'Reemplazar anterior',
+                'Agregar como opción'
+            );
+        } else {
+            executeSending(false);
         }
     };
 
@@ -8877,7 +8914,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                 onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.color = '#64748b'; }}
                                                             >
                                                                 <HiOutlineDocumentPlus size={24} color="#f26522" />
-                                                                Elaborar Propuesta
+                                                                {cotizaciones.length > 0 ? '➕ Agregar Opción Adicional' : 'Elaborar Propuesta'}
                                                             </button>
                                                         )
                                                     ) : (
