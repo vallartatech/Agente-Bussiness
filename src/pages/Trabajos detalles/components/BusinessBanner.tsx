@@ -99,28 +99,28 @@ const BusinessBanner: React.FC<BusinessBannerProps> = ({
 
                 {/* Botones de edición */}
                 {canEditBanner && onAdjustToggle && fileInputRef && (
-                    <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 10, zIndex: 50 }}>
+                    <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 50 }}>
                         <button
                             onClick={onAdjustToggle}
                             style={{
                                 background: '#f97316', border: '2px solid white', borderRadius: '50%',
-                                width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 cursor: 'pointer', color: 'white', boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
                             }}
                             title="Ajustar encuadre de imagen"
                         >
-                            <MoveVertical size={24} color="white" style={{ width: 24, height: 24, flexShrink: 0 }} />
+                            <MoveVertical size={18} color="white" style={{ width: 18, height: 18, flexShrink: 0 }} />
                         </button>
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             style={{
                                 background: '#f97316', border: '2px solid white', borderRadius: '50%',
-                                width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 cursor: 'pointer', color: 'white', boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
                             }}
                             title="Cambiar imagen de portada"
                         >
-                            <Pencil size={24} color="white" style={{ width: 24, height: 24, flexShrink: 0 }} />
+                            <Pencil size={18} color="white" style={{ width: 18, height: 18, flexShrink: 0 }} />
                         </button>
                     </div>
                 )}
@@ -146,14 +146,14 @@ const BusinessBanner: React.FC<BusinessBannerProps> = ({
                 <button
                     onClick={() => fileInputRef.current?.click()}
                     style={{
-                        position: 'absolute', top: 16, right: 16, background: '#f97316',
-                        border: '2px solid white', borderRadius: '50%', width: 44, height: 44,
+                        position: 'absolute', top: 12, right: 12, background: '#f97316',
+                        border: '2px solid white', borderRadius: '50%', width: 36, height: 36,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer', color: 'white', zIndex: 50, boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
                     }}
                     title="Añadir imagen de portada"
                 >
-                    <Pencil size={24} color="white" style={{ width: 24, height: 24, flexShrink: 0 }} />
+                    <Pencil size={18} color="white" style={{ width: 18, height: 18, flexShrink: 0 }} />
                 </button>
             )}
         </div>

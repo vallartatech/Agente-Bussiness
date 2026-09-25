@@ -261,7 +261,7 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
 
             {/* Contenido del sub-tab */}
             {equiposSubTab === 'registrados' ? (
-                <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>
+                <div style={{ width: '100%' }}>
                     <EquiposNegocio 
                         businessId={Number(id)} 
                         businessAreas={businessAreas}
@@ -271,9 +271,9 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                     />
                 </div>
             ) : (
-                <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>
-                    <div style={{ background: 'white', padding: '24px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+                <div style={{ width: '100%' }}>
+                    <div style={{ background: 'white', padding: '20px 24px', borderRadius: '18px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
                             <div>
                                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0 }}>
                                     <HiOutlineBolt size={20} style={{ color: '#f59e0b' }} /> Levantamientos por Áreas y Sub-áreas

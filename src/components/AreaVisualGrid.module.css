@@ -1,16 +1,16 @@
 .container {
     background-color: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-radius: 14px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
     overflow: hidden;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
     border: 1px solid #e2e8f0;
 }
 
 .header {
     background-color: #f97316;
     color: #ffffff;
-    padding: 16px 24px;
+    padding: 10px 18px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -19,11 +19,11 @@
 .headerLeft {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
 .areaName {
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -49,36 +49,38 @@
 }
 
 .headerRight {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     opacity: 0.9;
 }
 
 .gridContainer {
-    padding: 24px;
+    padding: 16px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 240px));
+    gap: 14px;
 }
 
 .card {
     position: relative;
-    border-radius: 16px;
+    border-radius: 12px;
     overflow: hidden;
-    aspect-ratio: 1 / 1;
+    aspect-ratio: 1 / 0.95;
+    max-width: 240px;
+    min-height: 165px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     cursor: pointer;
     background-color: #f1f5f9;
 }
 
 .card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 16px -2px rgba(0, 0, 0, 0.12);
 }
 
 .cardBg {
@@ -102,24 +104,24 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.1) 100%);
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.45) 50%, rgba(0, 0, 0, 0.1) 100%);
     z-index: 1;
 }
 
 .cardContent {
     position: relative;
     z-index: 2;
-    padding: 20px;
+    padding: 12px 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 12px;
+    gap: 6px;
 }
 
 .subAreaName {
     color: #ffffff;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 900;
     text-transform: uppercase;
     margin: 0;
@@ -129,9 +131,9 @@
 .areaBadge {
     background-color: #ffffff;
     color: #f97316;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 10px;
     font-weight: 800;
     text-transform: uppercase;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -140,38 +142,38 @@
 .areaCounterLabel {
     font-weight: 800;
     color: rgba(255, 255, 255, 0.8);
-    font-size: 11px;
+    font-size: 10px;
     margin-right: 4px;
 }
 
 .subAreaBadge {
     position: absolute;
-    top: 12px;
-    left: 12px;
-    background-color: rgba(15, 23, 42, 0.7);
+    top: 8px;
+    left: 8px;
+    background-color: rgba(15, 23, 42, 0.75);
     backdrop-filter: blur(4px);
     color: #ffffff;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
     font-weight: 800;
     text-transform: uppercase;
     z-index: 3;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .cardButtons {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 5px;
     width: 100%;
 }
 
 .actionBtn {
     border: none;
-    border-radius: 8px;
-    padding: 10px 16px;
-    font-size: 11px;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 10px;
     font-weight: 800;
     text-transform: uppercase;
     cursor: pointer;
@@ -192,7 +194,8 @@
 .btnInventory {
     background-color: #f97316;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 10px;
+    padding: 7px 10px;
 }
 
 .btnInventory:hover:not(:disabled) {
@@ -202,7 +205,7 @@
 
 .secondaryButtons {
     display: flex;
-    gap: 8px;
+    gap: 5px;
     width: 100%;
 }
 
@@ -210,8 +213,8 @@
     background-color: #0284c7;
     color: #ffffff;
     flex: 1;
-    padding: 8px;
-    font-size: 10px;
+    padding: 5px 6px;
+    font-size: 9px;
 }
 
 .btnBitacora:hover:not(:disabled) {
@@ -222,8 +225,8 @@
     background-color: #e11d48;
     color: #ffffff;
     flex: 1;
-    padding: 8px;
-    font-size: 10px;
+    padding: 5px 6px;
+    font-size: 9px;
 }
 
 .btnReport:hover:not(:disabled) {
@@ -233,13 +236,15 @@
 .addCard {
     background-color: #fafafa;
     border: 2px dashed #d4d4d8;
-    border-radius: 16px;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    aspect-ratio: 1 / 1;
+    gap: 8px;
+    aspect-ratio: 1 / 0.95;
+    max-width: 240px;
+    min-height: 165px;
     cursor: pointer;
     transition: all 0.2s ease;
     color: #525252;
@@ -252,12 +257,12 @@
 }
 
 .addIcon {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 300;
 }
 
 .addText {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 800;
     text-transform: uppercase;
 }
@@ -265,7 +270,7 @@
 @media (max-width: 640px) {
     .gridContainer {
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        padding: 16px;
+        gap: 10px;
+        padding: 12px;
     }
 }

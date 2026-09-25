@@ -301,8 +301,8 @@ const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, businessAre
     }
 
     return (
-        <div style={{ marginTop: '25px', animation: 'fadeIn 0.5s ease-out' }}>
-            <div style={{ display: 'grid', gap: '25px', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+        <div style={{ marginTop: '20px', animation: 'fadeIn 0.5s ease-out' }}>
+            <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                 {equipos.map((equipo, idx) => {
                     const intervenciones = getMergedIntervenciones(equipo, solicitudes, trabajos);
                     const maintenanceCount = intervenciones.length;
@@ -312,29 +312,29 @@ const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, businessAre
                             onClick={() => handleCardClick(equipo)}
                             style={{
                                 background: '#ffffff',
-                                border: '1px solid #4d4c5590',
-                                borderRadius: '24px',
-                                padding: '24px',
-                                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.03)',
-                                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '18px',
+                                padding: '16px 18px',
+                                boxShadow: '0 4px 15px rgba(15, 23, 42, 0.03)',
+                                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: '18px',
+                                gap: '12px',
                                 cursor: 'pointer'
                             }}
                             onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-5px)';
-                                e.currentTarget.style.boxShadow = '0 20px 40px rgba(15, 23, 42, 0.08)';
+                                e.currentTarget.style.transform = 'translateY(-3px)';
+                                e.currentTarget.style.boxShadow = '0 12px 24px rgba(15, 23, 42, 0.07)';
                                 e.currentTarget.style.borderColor = '#f26522';
                             }}
                             onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = 'translateY(0)';
-                                e.currentTarget.style.boxShadow = '0 10px 30px rgba(15, 23, 42, 0.03)';
-                                e.currentTarget.style.borderColor = '#4d4c5590';
+                                e.currentTarget.style.boxShadow = '0 4px 15px rgba(15, 23, 42, 0.03)';
+                                e.currentTarget.style.borderColor = '#cbd5e1';
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                                     {equipo.foto ? (
                                         <img
                                             src={equipo.foto}
@@ -344,67 +344,68 @@ const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, businessAre
                                                 const sibling = e.currentTarget.nextSibling as HTMLElement;
                                                 if (sibling) sibling.style.display = 'flex';
                                             }}
-                                            style={{ width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover' }}
+                                            style={{ width: '46px', height: '46px', borderRadius: '10px', objectFit: 'cover' }}
                                         />
                                     ) : null}
                                     <div className="img-placeholder" style={{
                                         display: equipo.foto ? 'none' : 'flex',
-                                        width: '60px',
-                                        height: '60px',
-                                        borderRadius: '12px',
+                                        width: '46px',
+                                        height: '46px',
+                                        borderRadius: '10px',
                                         background: '#f1f5f9',
                                         border: '1px solid #e2e8f0',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         color: '#0f172a'
                                     }}>
-                                        <HiOutlineCube size={28} />
+                                        <HiOutlineCube size={22} />
                                     </div>
                                     <div>
-                                        <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize' }}>
+                                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize' }}>
                                             {equipo.marca}
                                         </h4>
-                                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: '600' }}>
+                                        <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
                                             {equipo.nombre}
                                         </p>
                                     </div>
                                 </div>
                                 <span style={{
-                                    padding: '6px 14px',
-                                    borderRadius: '10px',
-                                    fontSize: '11px',
+                                    padding: '4px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '10px',
                                     fontWeight: '800',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.5px',
                                     background: '#0f172a',
                                     color: '#ffffff',
-                                    border: 'none'
+                                    border: 'none',
+                                    whiteSpace: 'nowrap'
                                 }}>
                                     {equipo.areaNombre}
                                 </span>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '5px' }}>
-                                <div style={{ padding: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <HiOutlineCube style={{ color: '#0f172a', fontSize: '18px' }} />
-                                    <div style={{ fontSize: '12px' }}>
-                                        <span style={{ color: '#64748b', display: 'block', fontSize: '10px', fontWeight: '600' }}>MODELO</span>
-                                        <span style={{ fontWeight: '700', color: '#0f172a' }}>{equipo.modelo}</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '2px' }}>
+                                <div style={{ padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <HiOutlineCube style={{ color: '#0f172a', fontSize: '15px' }} />
+                                    <div style={{ fontSize: '11px', minWidth: 0, overflow: 'hidden' }}>
+                                        <span style={{ color: '#64748b', display: 'block', fontSize: '9px', fontWeight: '700' }}>MODELO</span>
+                                        <span style={{ fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{equipo.modelo || '—'}</span>
                                     </div>
                                 </div>
                                 <div style={{
-                                    padding: '12px',
+                                    padding: '8px 10px',
                                     border: '1px solid #e2e8f0',
-                                    borderRadius: '15px',
+                                    borderRadius: '10px',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '8px',
+                                    gap: '6px',
                                     background: maintenanceCount > 0 ? '#f0fdf4' : '#f8fafc',
                                     borderColor: maintenanceCount > 0 ? '#bbf7d0' : '#e2e8f0'
                                 }}>
-                                    <HiOutlineShieldCheck style={{ color: maintenanceCount > 0 ? '#16a34a' : '#64748b', fontSize: '18px' }} />
-                                    <div style={{ fontSize: '12px' }}>
-                                        <span style={{ color: maintenanceCount > 0 ? '#15803d' : '#64748b', display: 'block', fontSize: '10px', fontWeight: '600' }}>INTERVENCIONES</span>
+                                    <HiOutlineShieldCheck style={{ color: maintenanceCount > 0 ? '#16a34a' : '#64748b', fontSize: '15px' }} />
+                                    <div style={{ fontSize: '11px' }}>
+                                        <span style={{ color: maintenanceCount > 0 ? '#15803d' : '#64748b', display: 'block', fontSize: '9px', fontWeight: '700' }}>INTERVENCIONES</span>
                                         <span style={{ fontWeight: '700', color: maintenanceCount > 0 ? '#166534' : '#0f172a' }}>{maintenanceCount}</span>
                                     </div>
                                 </div>
@@ -413,24 +414,24 @@ const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, businessAre
                             <button type="button"
                                 style={{
                                     width: '100%',
-                                    padding: '12px',
+                                    padding: '10px',
                                     background: maintenanceCount > 0
                                         ? 'linear-gradient(135deg, #f26522 0%, #d14d13 100%)'
                                         : '#ffffff',
                                     color: maintenanceCount > 0 ? '#ffffff' : '#0f172a',
                                     border: maintenanceCount > 0 ? 'none' : '1px solid #cbd5e1',
-                                    borderRadius: '14px',
+                                    borderRadius: '10px',
                                     fontWeight: '800',
-                                    fontSize: '13px',
-                                    marginTop: '5px',
+                                    fontSize: '12px',
+                                    marginTop: '2px',
                                     cursor: 'pointer',
-                                    boxShadow: maintenanceCount > 0 ? '0 4px 12px rgba(242, 101, 34, 0.25)' : 'none',
+                                    boxShadow: maintenanceCount > 0 ? '0 4px 12px rgba(242, 101, 34, 0.2)' : 'none',
                                     transition: 'all 0.2s ease'
                                 }}
                                 onMouseEnter={(e) => {
                                     if (maintenanceCount > 0) {
                                         e.currentTarget.style.transform = 'translateY(-1px)';
-                                        e.currentTarget.style.boxShadow = '0 6px 14px rgba(242, 101, 34, 0.35)';
+                                        e.currentTarget.style.boxShadow = '0 6px 14px rgba(242, 101, 34, 0.3)';
                                     } else {
                                         e.currentTarget.style.background = '#f8fafc';
                                     }
@@ -438,7 +439,7 @@ const EquiposNegocio: React.FC<EquiposNegocioProps> = ({ businessId, businessAre
                                 onMouseLeave={(e) => {
                                     if (maintenanceCount > 0) {
                                         e.currentTarget.style.transform = 'translateY(0)';
-                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(242, 101, 34, 0.25)';
+                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(242, 101, 34, 0.2)';
                                     } else {
                                         e.currentTarget.style.background = '#ffffff';
                                     }
