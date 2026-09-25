@@ -31,7 +31,10 @@ import {
     HiOutlineChevronUp,
     HiOutlineChevronLeft,
     HiOutlineChevronRight,
-    HiOutlinePaperAirplane
+    HiOutlinePaperAirplane,
+    HiOutlineCube,
+    HiOutlineCheckBadge,
+    HiOutlineTag
 } from "react-icons/hi2";
 import ReporteDetailModal from "../../components/modals/ReporteDetailModal";
 import { getTrabajo, updateEstadoTrabajo, assignTrabajador, updateTrabajo, getTrabajos } from "../../services/trabajosService";
@@ -6864,20 +6867,21 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                     <h3 className={styles.cardTitle} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Sucursal</h3>
                                 </div>
                                 <div className={styles.bentoContent}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '15px' }}>
-                                        <div style={{ minWidth: '160px', flex: '1 1 auto' }}>
-                                            <span className={styles.bentoLabel}>Nombre</span>
-                                            <span className={styles.bentoValue} style={{ fontSize: '20px', wordBreak: 'break-word' }}>{trabajo.sucursal || "No registrado"}</span>
-                                            <span className={styles.badge} style={{ marginTop: '5px' }}>{trabajo.tipo || "Trabajo"}</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: '#f8fafc', padding: '12px 16px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', wordBreak: 'break-word' }}>
+                                                {trabajo.sucursal || "No registrado"}
+                                            </span>
+                                            <span className={styles.badge} style={{ margin: 0 }}>{trabajo.tipo || "Trabajo"}</span>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start', justifyContent: 'center', flexShrink: 0 }}>
-                                            <span style={{ fontSize: '13px', color: '#059669', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                                                📅 Cita solicitada: {trabajo.fecha_programada ? (trabajo.fecha_programada.includes('-') ? trabajo.fecha_programada.split('-').reverse().join('/') : trabajo.fecha_programada) : trabajo.fecha}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '12px', color: '#047857', fontWeight: '700', background: '#ecfdf5', padding: '6px 12px', borderRadius: '10px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                📅 Cita: {trabajo.fecha_programada ? (trabajo.fecha_programada.includes('-') ? trabajo.fecha_programada.split('-').reverse().join('/') : trabajo.fecha_programada) : trabajo.fecha}
                                             </span>
                                             {trabajo.latitud_llegada && !['Finalizado', 'Completado'].includes(trabajo.estado) && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); setShowMapModal(true); }}
-                                                    style={{ padding: '6px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }}
+                                                    style={{ padding: '6px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }}
                                                     onMouseEnter={e => { e.currentTarget.style.background = '#d1fae5'; }}
                                                     onMouseLeave={e => { e.currentTarget.style.background = '#ecfdf5'; }}
                                                 >
@@ -6890,53 +6894,111 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                     {(trabajo.descripcion || parseFotoUrls(trabajo.foto_url).length > 0) && (
                                         <div
                                             className={styles.descriptionBox}
-                                            style={{ cursor: 'pointer', transition: 'all 0.2s ease', position: 'relative' }}
+                                            style={{ cursor: 'pointer', transition: 'all 0.2s ease', position: 'relative', marginTop: '12px' }}
                                             title="Haz clic para ver más detalles"
                                             onClick={() => setShowZoomModal(true)}
                                             onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 15px rgba(0,0,0,0.05)'; }}
                                             onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
                                         >
-                                            <div style={{ position: 'absolute', top: '10px', right: '10px', opacity: 0.5 }}>
+                                            <div style={{ position: 'absolute', top: '12px', right: '12px', opacity: 0.5 }}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                                                 </svg>
                                             </div>
                                             {groupedJobs.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-                                                    <span className={styles.bentoLabel} style={{ color: '#0f172a', fontWeight: '800', fontSize: '13px', textTransform: 'uppercase', marginBottom: '5px', display: 'block' }}>
-                                                        📋 Servicios creados en esta Solicitud ({groupedJobs.length})
-                                                    </span>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                                                        <span style={{ color: '#0f172a', fontWeight: '800', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                            📋 Servicios en esta Solicitud
+                                                        </span>
+                                                        <span style={{ background: '#f97316', color: 'white', fontSize: '11px', fontWeight: '800', padding: '2px 8px', borderRadius: '12px' }}>
+                                                            {groupedJobs.length}
+                                                        </span>
+                                                    </div>
                                                     {groupedJobs.map((groupJob, idx) => {
-                                                        const cleanDesc = groupJob.descripcion?.replace(/\[Grupo:\s*REQ-\d+\]\s*\n?/, "") || "";
+                                                        const rawDesc = groupJob.descripcion?.replace(/\[Grupo:\s*REQ-\d+\]\s*\n?/, "") || "";
+                                                        const equipoMatch = rawDesc.match(/(\*?\[Equipo:\s*([^\]]+)\]\*?)/i);
+                                                        const equipoName = equipoMatch ? equipoMatch[2].trim() : null;
+                                                        let cleanDesc = equipoMatch ? rawDesc.replace(equipoMatch[0], "").trim() : rawDesc;
+                                                        cleanDesc = cleanDesc.replace(/^\*+|\*+$/g, "").replace(/^"+|"+$/g, "").trim();
+
+                                                        const tLower = (groupJob.titulo || "").toLowerCase();
+                                                        let catIcon = "🛠️";
+                                                        let catName = "Servicio";
+                                                        let catColor = "#f97316";
+                                                        let catBg = "#fff7ed";
+
+                                                        if (tLower.includes("electric")) { catIcon = "⚡"; catName = "Electricidad"; catColor = "#d97706"; catBg = "#fef3c7"; }
+                                                        else if (tLower.includes("plomer")) { catIcon = "🚰"; catName = "Plomería"; catColor = "#0284c7"; catBg = "#e0f2fe"; }
+                                                        else if (tLower.includes("manten")) { catIcon = "🔧"; catName = "Mantenimiento"; catColor = "#ea580c"; catBg = "#ffedd5"; }
+                                                        else if (tLower.includes("albañil")) { catIcon = "🧱"; catName = "Albañilería"; catColor = "#7c3aed"; catBg = "#ede9fe"; }
+                                                        else if (tLower.includes("limpieza")) { catIcon = "🧹"; catName = "Limpieza"; catColor = "#059669"; catBg = "#d1fae5"; }
+                                                        else if (tLower.includes("clima") || tLower.includes("aire")) { catIcon = "❄️"; catName = "Clima"; catColor = "#0891b2"; catBg = "#cffafe"; }
+
+                                                        const isReparacion = tLower.includes("reparación") || tLower.includes("reparacion");
+                                                        const isVisita = tLower.includes("visita") || tLower.includes("diagnóstico") || tLower.includes("diagnostico");
                                                         const photos = parseFotoUrls(groupJob.foto_url);
+
                                                         return (
-                                                            <div key={groupJob.id} style={{ padding: '14px', background: '#ffffff', borderRadius: '12px', border: '1px solid #cbd5e1', width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
-                                                                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#1e293b', flex: 1, minWidth: 0, wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: '1.4' }}>
-                                                                        🛠️ SERVICIO #{idx + 1}: {groupJob.titulo}
-                                                                    </span>
-                                                                    <span style={{ margin: 0, fontSize: '11px', fontWeight: '800', background: '#e2e8f0', color: '#334155', padding: '3px 8px', borderRadius: '8px', whiteSpace: 'nowrap', flexShrink: 0, display: 'inline-flex', alignItems: 'center', letterSpacing: '0.3px' }}>
+                                                            <div key={groupJob.id} style={{
+                                                                padding: '16px',
+                                                                background: '#ffffff',
+                                                                borderRadius: '14px',
+                                                                border: '1.5px solid #e2e8f0',
+                                                                borderLeft: `4px solid ${catColor}`,
+                                                                width: '100%',
+                                                                boxSizing: 'border-box',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                gap: '10px'
+                                                            }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                        <span style={{ fontSize: '11px', fontWeight: '800', background: catBg, color: catColor, padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
+                                                                            {catIcon} #{idx + 1} {catName}
+                                                                        </span>
+                                                                        {isReparacion && (
+                                                                            <span style={{ fontSize: '10px', fontWeight: '800', background: '#fef2f2', color: '#dc2626', padding: '3px 7px', borderRadius: '6px', border: '1px solid #fee2e2' }}>
+                                                                                REPARACIÓN
+                                                                            </span>
+                                                                        )}
+                                                                        {isVisita && (
+                                                                            <span style={{ fontSize: '10px', fontWeight: '800', background: '#f0f9ff', color: '#0284c7', padding: '3px 7px', borderRadius: '6px', border: '1px solid #e0f2fe' }}>
+                                                                                DIAGNÓSTICO
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span style={{ fontSize: '11px', fontWeight: '700', background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '6px' }}>
                                                                         ID: {groupJob.id}
                                                                     </span>
                                                                 </div>
-                                                                <p className={styles.descriptionQuote} style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#334155', fontStyle: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap', maxWidth: '100%' }}>
-                                                                    "{cleanDesc || "Sin descripción."}"
+
+                                                                {equipoName && (
+                                                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', color: '#334155', width: 'fit-content' }}>
+                                                                        <HiOutlineCube style={{ color: '#f97316', fontSize: '14px' }} />
+                                                                        <span>Equipo: <strong style={{ color: '#0f172a' }}>{equipoName}</strong></span>
+                                                                    </div>
+                                                                )}
+
+                                                                <p style={{ margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5', fontWeight: '500', wordBreak: 'break-word' }}>
+                                                                    {cleanDesc || "Sin descripción adicional."}
                                                                 </p>
+
                                                                 {photos.length > 0 && (
-                                                                    <div style={{ width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-                                                                        <span className={styles.bentoLabel} style={{ marginBottom: '6px', color: '#64748b', fontSize: '11px', display: 'block' }}>
-                                                                            Evidencia ({photos.length}):
+                                                                    <div style={{ marginTop: '2px', width: '100%', boxSizing: 'border-box' }}>
+                                                                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                                                                            📸 Evidencia ({photos.length}):
                                                                         </span>
-                                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
+                                                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                                                             {photos.map((url, pIdx) => (
                                                                                 <img
                                                                                     key={pIdx}
                                                                                     src={url}
                                                                                     alt={`Evidencia ${idx + 1}-${pIdx + 1}`}
                                                                                     onClick={(e) => { e.stopPropagation(); setSelectedZoomImage(url); }}
-                                                                                    style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'transform 0.15s ease', flexShrink: 0 }}
-                                                                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                                                                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                                                                                    style={{ width: '54px', height: '54px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0 }}
+                                                                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.borderColor = '#f97316'; }}
+                                                                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
                                                                                 />
                                                                             ))}
                                                                         </div>
@@ -6947,7 +7009,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                     })}
                                                 </div>
                                             ) : (
-                                                <div style={{ width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+                                                <div style={{ width: '100%', boxSizing: 'border-box' }}>
                                                     {trabajo.descripcion && (
                                                         <>
                                                             <span className={styles.bentoLabel} style={{ marginBottom: '4px', color: '#334155' }}>Problema Reportado</span>
@@ -6955,18 +7017,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                         </>
                                                     )}
                                                     {parseFotoUrls(trabajo.foto_url).length > 0 && (
-                                                        <div style={{ marginTop: '10px', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+                                                        <div style={{ marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
                                                             <span className={styles.bentoLabel} style={{ marginBottom: '6px', color: '#334155', display: 'block' }}>Fotos Adjuntas ({parseFotoUrls(trabajo.foto_url).length}):</span>
-                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
+                                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                                                 {parseFotoUrls(trabajo.foto_url).map((url, idx) => (
                                                                     <img
                                                                         key={idx}
                                                                         src={url}
                                                                         alt={`Evidencia ${idx + 1}`}
                                                                         onClick={(e) => { e.stopPropagation(); setSelectedZoomImage(url); }}
-                                                                        style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'transform 0.15s ease', flexShrink: 0 }}
-                                                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                                                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                                                                        style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0 }}
+                                                                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.borderColor = '#f97316'; }}
+                                                                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
                                                                     />
                                                                 ))}
                                                             </div>
@@ -7018,26 +7080,57 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             {/* Card 2: Estado Actual (4/12) */}
                             <div className={`${styles.bentoCard} ${styles.colSpan4} ${styles.estadoCard}`}>
                                 <div className={styles.cardHeader}>
-                                    <div className={`${styles.iconBox} ${trabajo.estado === 'En Espera' ? styles.bgBlue : styles.bgOrange}`}>
+                                    <div className={`${styles.iconBox} ${trabajo.estado === 'Finalizado' ? styles.bgGreen : (trabajo.estado === 'En Espera' ? styles.bgBlue : styles.bgOrange)}`}>
                                         <HiOutlineClock size={18} />
                                     </div>
-                                    <h3 className={styles.cardTitle}>Estado</h3>
+                                    <h3 className={styles.cardTitle}>Estado de Solicitud</h3>
                                 </div>
-                                <div className={styles.bentoContent} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', gap: '12px' }}>
-                                    <span className={styles.bentoValue} style={{ color: (trabajo.tecnico && trabajo.tecnico !== "Sin asignar") ? '#059669' : (trabajo.estado === 'En Espera' ? '#2563eb' : '#d97706'), fontSize: '16px', textAlign: 'center' }}>
-                                        {trabajo.tecnico && trabajo.tecnico !== "Sin asignar" && (trabajo.estado === 'Asignado' || trabajo.estado === 'Cotización Rechazada' || trabajo.estado === 'Cotización Aceptada' || trabajo.estado === 'Cotización Aprobada' || trabajo.estado === 'En Proceso')
-                                            ? `Asignado a: ${trabajo.tecnico}`
-                                            : trabajo.estado === 'En Espera' && trabajo.tecnico && trabajo.tecnico !== "Sin asignar"
-                                                ? `Aceptado por: ${trabajo.tecnico}`
-                                                : trabajo.estado}
-                                    </span>
-                                    <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600' }}>
-                                        Actividad: {trabajo.fecha}
-                                    </span>
+                                <div className={styles.bentoContent} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                    <div style={{
+                                        background: trabajo.estado === 'Finalizado' ? '#f0fdf4' : (trabajo.estado === 'En Espera' ? '#eff6ff' : '#fff7ed'),
+                                        border: `1.5px solid ${trabajo.estado === 'Finalizado' ? '#bbf7d0' : (trabajo.estado === 'En Espera' ? '#bfdbfe' : '#fed7aa')}`,
+                                        borderRadius: '14px',
+                                        padding: '14px',
+                                        textAlign: 'center'
+                                    }}>
+                                        <span style={{
+                                            color: trabajo.estado === 'Finalizado' ? '#15803d' : ((trabajo.tecnico && trabajo.tecnico !== "Sin asignar") ? '#059669' : (trabajo.estado === 'En Espera' ? '#2563eb' : '#d97706')),
+                                            fontSize: '16px',
+                                            fontWeight: '800',
+                                            display: 'block'
+                                        }}>
+                                            {trabajo.tecnico && trabajo.tecnico !== "Sin asignar" && (trabajo.estado === 'Asignado' || trabajo.estado === 'Cotización Rechazada' || trabajo.estado === 'Cotización Aceptada' || trabajo.estado === 'Cotización Aprobada' || trabajo.estado === 'En Proceso')
+                                                ? `Asignado a: ${trabajo.tecnico}`
+                                                : trabajo.estado === 'En Espera' && trabajo.tecnico && trabajo.tecnico !== "Sin asignar"
+                                                    ? `Aceptado por: ${trabajo.tecnico}`
+                                                    : trabajo.estado}
+                                        </span>
+                                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                                            Actividad: {trabajo.fecha}
+                                        </span>
+                                    </div>
+
+                                    {/* Resumen de Información */}
+                                    <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '12px 14px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                            <span style={{ color: '#64748b', fontWeight: '600' }}>Servicios totales:</span>
+                                            <strong style={{ color: '#0f172a' }}>{groupedJobs.length > 0 ? groupedJobs.length : 1}</strong>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                            <span style={{ color: '#64748b', fontWeight: '600' }}>Técnico:</span>
+                                            <strong style={{ color: (trabajo.tecnico && trabajo.tecnico !== "Sin asignar") ? '#059669' : '#94a3b8' }}>
+                                                {trabajo.tecnico || "Sin asignar"}
+                                            </strong>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                            <span style={{ color: '#64748b', fontWeight: '600' }}>Tipo solicitud:</span>
+                                            <strong style={{ color: '#0f172a' }}>{trabajo.tipo || "Estándar"}</strong>
+                                        </div>
+                                    </div>
 
                                     {/* ALERTA Y BOTÓN DE RE-COTIZAR PARA EL TÉCNICO EN LA PESTAÑA DATOS */}
                                     {(user?.role === 'tecnico' || user?.role === 'tecnico-normal' || user?.role === 'tecnico-autonomo') && (trabajo.estado === 'Cotización Rechazada' || cotizaciones.some(c => c.estado === 'Rechazada')) && (
-                                        <div style={{ marginTop: '12px', width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ marginTop: '4px', width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                             <div style={{ background: '#fef3c7', padding: '10px', borderRadius: '8px', border: '1px solid #fde68a', textAlign: 'center' }}>
                                                 <span style={{ color: '#b45309', fontSize: '12px', fontWeight: 'bold' }}>El encargado ha solicitado modificar la cotización.</span>
                                             </div>
