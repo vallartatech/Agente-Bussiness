@@ -1827,9 +1827,9 @@ const AdminReporte: React.FC = () => {
                 <div
                     style={{
                         position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-                        background: 'rgba(0, 0, 0, 0.85)', zIndex: 10001, display: 'flex',
+                        background: 'rgba(0, 0, 0, 0.88)', zIndex: 10000000, display: 'flex',
                         alignItems: 'center', justifyContent: 'center', padding: '20px',
-                        backdropFilter: 'blur(5px)'
+                        backdropFilter: 'blur(8px)'
                     }}
                     onClick={() => setSelectedZoomImage(null)}
                 >

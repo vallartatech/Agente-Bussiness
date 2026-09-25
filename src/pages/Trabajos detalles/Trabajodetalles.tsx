@@ -1238,10 +1238,10 @@ const TrabajoDetalle: React.FC = () => {
             {/* Zoom de imagen */}
             {selectedZoomImage && (
                 <div
-                    style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0, 0, 0, 0.85)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}
+                    style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0, 0, 0, 0.88)", zIndex: 10000000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out", backdropFilter: "blur(8px)" }}
                     onClick={() => setSelectedZoomImage(null)}
                 >
-                    <img src={selectedZoomImage} alt="Zoom" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "12px", objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+                    <img src={selectedZoomImage} alt="Zoom" style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "12px", objectFit: "contain", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()} />
                 </div>
             )}
         </div>

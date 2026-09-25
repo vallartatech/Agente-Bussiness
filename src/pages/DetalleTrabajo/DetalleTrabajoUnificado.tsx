@@ -12909,51 +12909,6 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     </div>
                 </div>
             )}
-            {/* PROBLEM DETAILS / IMAGE ZOOM MODAL */}
-            {selectedZoomImage && (
-                <div
-                    style={{
-                        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-                        background: 'rgba(0, 0, 0, 0.85)', zIndex: 9999, display: 'flex',
-                        alignItems: 'center', justifyContent: 'center', padding: '20px',
-                        backdropFilter: 'blur(5px)'
-                    }}
-                    onClick={() => setSelectedZoomImage(null)}
-                >
-                    <div
-                        style={{
-                            position: 'relative', maxWidth: '95%', maxHeight: '95%', display: 'flex', flexDirection: 'column',
-                            alignItems: 'center', background: '#fff', padding: '30px', borderRadius: '24px', overflowY: 'auto'
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <button
-                            onClick={() => setSelectedZoomImage(null)}
-                            style={{ position: 'absolute', top: '15px', right: '15px', background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', fontSize: '20px', fontWeight: 'bold' }}
-                        >
-                            ✕
-                        </button>
-
-                        <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', marginBottom: '20px', width: '100%', textAlign: 'left' }}>Detalles de la Evidencia</h2>
-
-                        {trabajo?.descripcion && (
-                            <div style={{ width: '100%', marginBottom: '24px' }}>
-                                <span style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Problema Reportado</span>
-                                <p style={{ fontSize: '18px', color: '#334155', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', margin: 0, lineHeight: '1.6' }}>"{trabajo.descripcion}"</p>
-                            </div>
-                        )}
-
-                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <span style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', alignSelf: 'flex-start' }}>Foto Adjunta</span>
-                            <img
-                                src={selectedZoomImage}
-                                alt="Zoomed Evidence"
-                                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '15px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* MODAL DE RECHAZO CON MOTIVO */}
             {showRejectionModal && (
@@ -13801,6 +13756,96 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                             >
                                 {isSendingQuote ? 'Enviando...' : 'Confirmar y Enviar'}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* PROBLEM DETAILS / IMAGE ZOOM MODAL (TOP-LEVEL LIGHTBOX) */}
+            {selectedZoomImage && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100vw',
+                        height: '100vh',
+                        background: 'rgba(0, 0, 0, 0.88)',
+                        zIndex: 10000000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '20px',
+                        backdropFilter: 'blur(8px)',
+                        animation: 'fadeIn 0.2s ease-out'
+                    }}
+                    onClick={() => setSelectedZoomImage(null)}
+                >
+                    <div
+                        style={{
+                            position: 'relative',
+                            maxWidth: '92vw',
+                            maxHeight: '92vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            background: '#ffffff',
+                            padding: '24px 30px 30px',
+                            borderRadius: '24px',
+                            overflowY: 'auto',
+                            boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.5)',
+                            animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={() => setSelectedZoomImage(null)}
+                            style={{
+                                position: 'absolute',
+                                top: '16px',
+                                right: '16px',
+                                background: '#f1f5f9',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '38px',
+                                height: '38px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#475569',
+                                cursor: 'pointer',
+                                fontSize: '20px',
+                                fontWeight: 'bold',
+                                zIndex: 10,
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#475569'; }}
+                        >
+                            ✕
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', width: '100%', paddingRight: '45px' }}>
+                            <div style={{ background: '#eff6ff', padding: '8px', borderRadius: '10px', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                🔍
+                            </div>
+                            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b', margin: 0, textAlign: 'left' }}>
+                                Evidencia Ampliada
+                            </h2>
+                        </div>
+
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <img
+                                src={selectedZoomImage}
+                                alt="Zoomed Evidence"
+                                style={{
+                                    maxWidth: '85vw',
+                                    maxHeight: '75vh',
+                                    objectFit: 'contain',
+                                    borderRadius: '16px',
+                                    boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                                    border: '1px solid #e2e8f0'
+                                }}
+                            />
                         </div>
                     </div>
                 </div>
