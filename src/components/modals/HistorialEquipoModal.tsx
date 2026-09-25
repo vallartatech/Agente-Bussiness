@@ -71,6 +71,18 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                     localInitial[jobId] = JSON.parse(localRaw);
                 } catch (_) {}
             }
+            if (!localInitial[jobId]) localInitial[jobId] = {};
+            if (!localInitial[jobId].subReports) localInitial[jobId].subReports = {};
+
+            for (let p = 0; p < 20; p++) {
+                const subRaw = localStorage.getItem(`report_data_${jobId}_${p}`) || localStorage.getItem(`report_data_${jobId}_point_${p}`);
+                if (subRaw) {
+                    try {
+                        const parsedSub = JSON.parse(subRaw);
+                        localInitial[jobId].subReports[`${jobId}_${p}`] = parsedSub;
+                    } catch (_) {}
+                }
+            }
         });
         if (Object.keys(localInitial).length > 0) {
             setLoadedReports(prev => ({ ...prev, ...localInitial }));
@@ -133,28 +145,41 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
             if (repSerie && repSerie === targetSerie) return true;
         }
 
-        // 3. Coincidencia por objeto estructurado equipoInfo
-        const eqInfo = itemOrReport.equipoInfo || itemOrReport.equipo;
-        if (eqInfo) {
-            const mMarca = eqInfo.marca && eq.marca && String(eqInfo.marca).trim().toLowerCase() === String(eq.marca).trim().toLowerCase();
-            const mModelo = eqInfo.modelo && eq.modelo && String(eqInfo.modelo).trim().toLowerCase() === String(eq.modelo).trim().toLowerCase();
-            const mNombre = eqInfo.nombre && eq.nombre && String(eqInfo.nombre).trim().toLowerCase() === String(eq.nombre).trim().toLowerCase();
-            if (mMarca && (mModelo || mNombre)) return true;
-            if (mNombre && mModelo) return true;
-        }
+        // 3. Tokens del equipo objetivo (ej. "PRIME", "SAMSUNG", "123")
+        const eqTokens: string[] = [
+            eq.nombre,
+            eq.marca,
+            eq.modelo,
+            eq.serie
+        ]
+        .filter(Boolean)
+        .map(s => String(s).toLowerCase().trim())
+        .filter(s => s.length > 1 && s !== 'n/a' && s !== 'null' && s !== 'undefined' && s !== 's/n');
 
-        // 4. Coincidencia semántica en textos del subreporte / reporte de tienda
-        const repText = `${itemOrReport.reporteTienda || ''} ${itemOrReport.titulo || ''} ${itemOrReport.hallazgo || ''} ${itemOrReport.descripcion_problema || ''} ${itemOrReport.problema_cliente || ''} ${itemOrReport.concepto_cotizacion || ''}`.toLowerCase();
-        const marca = String(eq.marca || '').trim().toLowerCase();
-        const modelo = String(eq.modelo || '').trim().toLowerCase();
-        const nombre = String(eq.nombre || '').trim().toLowerCase();
+        // 4. Texto completo de datos del reporte/item candidato
+        const repTextParts = [
+            itemOrReport.equipoInfo?.marca,
+            itemOrReport.equipoInfo?.modelo,
+            itemOrReport.equipoInfo?.nombre,
+            itemOrReport.equipoInfo?.serie,
+            itemOrReport.equipoInfo?.tipo,
+            itemOrReport.equipo?.marca,
+            itemOrReport.equipo?.modelo,
+            itemOrReport.equipo?.nombre,
+            itemOrReport.reporteTienda,
+            itemOrReport.titulo,
+            itemOrReport.tareaTitulo,
+            itemOrReport.hallazgo,
+            itemOrReport.concepto_cotizacion,
+            itemOrReport.descripcion_problema
+        ];
+        const repText = repTextParts.filter(Boolean).join(' ').toLowerCase();
 
-        const hasMarca = marca.length > 1 && repText.includes(marca);
-        const hasModelo = modelo.length > 0 && repText.includes(modelo);
-        const hasNombre = nombre.length > 1 && repText.includes(nombre);
-
-        if ((hasMarca && hasModelo) || (hasMarca && hasNombre) || (hasNombre && hasModelo)) {
-            return true;
+        if (eqTokens.length > 0 && repText) {
+            const matchedTokens = eqTokens.filter(tok => repText.includes(tok));
+            if (matchedTokens.length >= 2) return true;
+            if (eq.nombre && repText.includes(String(eq.nombre).toLowerCase().trim()) && String(eq.nombre).length >= 3) return true;
+            if (eq.marca && eq.modelo && repText.includes(String(eq.marca).toLowerCase().trim()) && repText.includes(String(eq.modelo).toLowerCase().trim())) return true;
         }
 
         return false;
@@ -205,15 +230,14 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
         candidateReports.forEach(({ sourceJobId, data: p }) => {
             if (!p) return;
 
-            let hasMatchedSubReports = false;
+            const hasSubReports = p.subReports && typeof p.subReports === 'object' && Object.keys(p.subReports).length > 0;
 
             // Si contiene subReports estructurados (multi-punto / tareas divididas)
-            if (p.subReports && typeof p.subReports === 'object') {
+            if (hasSubReports) {
                 Object.entries(p.subReports).forEach(([subKey, subData]: [string, any]) => {
                     if (subData && (subData.descripcion || subData.reporteTienda || subData.imagenes || subData.materiales)) {
                         // FILTRADO ESTRICTO: Solo incluir el subreporte si pertenece a ESTE equipo
                         if (matchesTargetEquipo(subData, equipo)) {
-                            hasMatchedSubReports = true;
                             const piezas = Array.isArray(subData.refaccionesList)
                                 ? subData.refaccionesList.map((r: any) => `${r.cantidad || 1}x ${r.pieza || r.nombre || r.material}`).join(' · ')
                                 : '';
@@ -234,13 +258,9 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                         }
                     }
                 });
-            }
-
-            // Reporte único raíz (SOLO si NO tiene subReports o ninguno coincidió como subreporte)
-            if (!hasMatchedSubReports && (p.descripcion || p.reporteTienda || p.hallazgo || p.imagenes)) {
-                // Verificar si este reporte raíz pertenece al equipo o a la solicitud del equipo
-                const isMatchingRoot = matchesTargetEquipo(p, equipo) || matchesTargetEquipo(req, equipo);
-                if (isMatchingRoot) {
+            } else if (p.descripcion || p.reporteTienda || p.hallazgo || p.imagenes) {
+                // Reporte único raíz (SOLO si NO tiene subReports y coincide con el equipo)
+                if (matchesTargetEquipo(p, equipo)) {
                     const piezas = Array.isArray(p.refaccionesList)
                         ? p.refaccionesList.map((r: any) => `${r.cantidad || 1}x ${r.pieza || r.nombre || r.material}`).join(' · ')
                         : '';
