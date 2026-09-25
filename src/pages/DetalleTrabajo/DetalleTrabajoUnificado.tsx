@@ -48,7 +48,16 @@ import ReportePDFPreview, { parseWorkItems } from "../../components/modals/Repor
 import ChatTrabajo from "../../components/ChatTrabajo";
 import NegotiationChatWidget from "../../components/chat/NegotiationChatWidget";
 import UbicacionMapaModal from "../../components/modals/UbicacionMapaModal";
-import { findMatchingSubReport, filterQuoteDataForPoint } from "../../utils/reportUtils";
+import { 
+    findMatchingSubReport, 
+    filterQuoteDataForPoint,
+    normalizeText,
+    extractQuoteTitle,
+    getMatchingQuoteForTask,
+    getAcceptedItemsForQuote,
+    isTaskQuoteApproved,
+    filterTaskItemsByAccepted
+} from "../../utils/reportUtils";
 import { generateMaintenanceReportPDF } from "../../utils/pdfGenerator";
 export interface CotizacionData {
     id?: number;
@@ -214,23 +223,24 @@ const parseMaterials = (text: string) => {
 };
 
 const getQuoteTitle = (desc: string, fallback: string) => {
-    if (desc && desc.startsWith('=== TÍTULO:')) {
-        const parts = desc.split('===');
-        if (parts.length >= 3) {
-            return parts[1].replace('TÍTULO:', '').trim();
-        }
-    }
-    return fallback;
+    return extractQuoteTitle(desc, fallback);
 };
 
 const cleanQuoteDescription = (desc: string) => {
-    if (desc && desc.startsWith('=== TÍTULO:')) {
-        const parts = desc.split('===');
+    let cleaned = desc || '';
+    if (cleaned.startsWith('=== TÍTULO:') || cleaned.startsWith('=== TITULO:')) {
+        const parts = cleaned.split('===');
         if (parts.length >= 3) {
-            return parts.slice(2).join('===').trim();
+            cleaned = parts.slice(2).join('===').trim();
         }
     }
-    return desc;
+    if (cleaned.includes('|||ACCEPTED_ITEMS|||')) {
+        cleaned = cleaned.split('|||ACCEPTED_ITEMS|||')[0].trim();
+    }
+    if (cleaned.includes('|||QUOTE_HISTORY|||')) {
+        cleaned = cleaned.split('|||QUOTE_HISTORY|||')[0].trim();
+    }
+    return cleaned;
 };
 
 export interface SosPointItem {
@@ -2615,17 +2625,19 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     // Update in Backend (parallel unified update for grouped jobs or single job)
                     const jobsToAssign = (groupedJobs && groupedJobs.length > 0) ? groupedJobs : [trabajo];
 
+                    const hasAnyApproved = cotizaciones.some(c => c.estado === 'Aprobada') || trabajo.estado === 'Cotización Aceptada' || trabajo.estado === 'Cotización Aprobada';
+
                     await Promise.all(jobsToAssign.map(async (currentJob) => {
                         const isQuoteState = currentJob.estado === "Cotización Enviada" || currentJob.estado === "Reasignación Solicitada";
                         const isCotizacionAprobadaReassign = currentJob.estado === "Cotización Aceptada" || currentJob.estado === "Cotización Aprobada";
 
                         let currentNewEstado: string;
-                        if (isQuoteState && currentJob.tipo === "Visita") {
-                            currentNewEstado = "Cotización Enviada";
-                        } else if (isCotizacionAprobadaReassign) {
+                        if (selectedType === "Trabajo" || hasAnyApproved || isCotizacionAprobadaReassign) {
                             currentNewEstado = "Asignado";
+                        } else if (isQuoteState && currentJob.tipo === "Visita") {
+                            currentNewEstado = "Cotización Enviada";
                         } else {
-                            const needsStateUpdate = currentJob.estado === "Pendiente" || currentJob.estado === "Solicitud" || currentJob.estado === "En Espera" || currentJob.estado === "Reasignación Solicitada" || currentJob.estado === "Rechazada";
+                            const needsStateUpdate = currentJob.estado === "Pendiente" || currentJob.estado === "Solicitud" || currentJob.estado === "En Espera" || currentJob.estado === "Reasignación Solicitada" || currentJob.estado === "Rechazada" || currentJob.estado === "Cotización Rechazada" || currentJob.estado === "Recotización Solicitada";
                             currentNewEstado = needsStateUpdate ? "Asignado" : currentJob.estado;
                             localStorage.removeItem(`reassign_reason_${currentJob.id}`);
                         }
@@ -2657,14 +2669,18 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                     const isCotizacionAprobadaReassign = trabajo.estado === "Cotización Aceptada" || trabajo.estado === "Cotización Aprobada";
 
                     let newEstado: string;
-                    if (isQuoteState && trabajo.tipo === "Visita") {
-                        newEstado = "Cotización Enviada";
-                    } else if (isCotizacionAprobadaReassign) {
+                    if (selectedType === "Trabajo" || hasAnyApproved || isCotizacionAprobadaReassign) {
                         newEstado = "Asignado";
+                    } else if (isQuoteState && trabajo.tipo === "Visita") {
+                        newEstado = "Cotización Enviada";
                     } else {
-                        const needsStateUpdate = trabajo.estado === "Pendiente" || trabajo.estado === "Solicitud" || trabajo.estado === "En Espera" || trabajo.estado === "Reasignación Solicitada" || trabajo.estado === "Rechazada";
+                        const needsStateUpdate = trabajo.estado === "Pendiente" || trabajo.estado === "Solicitud" || trabajo.estado === "En Espera" || trabajo.estado === "Reasignación Solicitada" || trabajo.estado === "Rechazada" || trabajo.estado === "Cotización Rechazada" || trabajo.estado === "Recotización Solicitada";
                         newEstado = needsStateUpdate ? "Asignado" : trabajo.estado;
                     }
+
+                    try {
+                        await updateEstadoTrabajo(trabajo.id, { estado: newEstado });
+                    } catch (_) {}
 
                     localStorage.removeItem(`reassign_reason_${trabajo.id}`);
 
@@ -3773,7 +3789,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         const isVisita = trabajo.tipo === "Visita";
 
         if (!isVisita) {
-            const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo.id);
+            const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo.id).filter(t => cotizaciones.length === 0 || isTaskQuoteApproved(t, cotizaciones, rejectionReasons, recotizacionReasons));
             const totalCount = execTasks.length || 1;
             const doneCount = execTasks.filter(t => isTaskReportFinalized(t)).length;
             if (doneCount < totalCount) {
@@ -4506,8 +4522,30 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             return handleAdminAceptarCotizacionSOS(cotizId);
         }
         try {
-            const finalMonto = customTotal !== undefined ? customTotal : (cotizaciones.find(c => c.id === cotizId)?.monto || 0);
-            await updateCotizacionStatus(cotizId, "Aprobada");
+            const targetCot = cotizaciones.find(c => c.id === cotizId);
+            const finalMonto = customTotal !== undefined ? customTotal : (targetCot?.monto || 0);
+
+            // Persistir marcador de items aceptados en la descripción de la cotización para persistencia en base de datos
+            const ACCEPTED_ITEMS_MARKER = '|||ACCEPTED_ITEMS|||';
+            let newDesc = targetCot?.descripcion || '';
+            if (acceptedItems && acceptedItems.length > 0) {
+                if (newDesc.includes(ACCEPTED_ITEMS_MARKER)) {
+                    newDesc = newDesc.split(ACCEPTED_ITEMS_MARKER)[0].trim();
+                }
+                newDesc += `\n\n${ACCEPTED_ITEMS_MARKER}${JSON.stringify(acceptedItems)}`;
+            }
+
+            try {
+                await updateCotizacion(cotizId, {
+                    estado: "Aprobada",
+                    monto: Number(finalMonto),
+                    descripcion: newDesc
+                });
+            } catch (errUp) {
+                console.warn("Fallback to updateCotizacionStatus:", errUp);
+                await updateCotizacionStatus(cotizId, "Aprobada");
+            }
+
             await updateEstadoTrabajo(trabajo.id, {
                 estado: "Cotización Aprobada",
                 cotizacion_aceptada: {
@@ -4521,7 +4559,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 localStorage.setItem(`quote_accepted_items_${trabajo.id}`, JSON.stringify(acceptedItems));
             }
 
-            setCotizaciones(prev => prev.map(c => c.id === cotizId ? { ...c, estado: "Aprobada" as const, monto: String(finalMonto) } : c));
+            setCotizaciones(prev => prev.map(c => c.id === cotizId ? { ...c, estado: "Aprobada" as const, monto: String(finalMonto), descripcion: newDesc } : c));
             setTrabajo((prev: any) => prev ? { ...prev, estado: "Cotización Aprobada" } : prev);
             // Notificar al Admin y al Técnico
             try {
@@ -4720,7 +4758,10 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             localStorage.setItem('cotiz_rejections', JSON.stringify(newTs));
             localStorage.setItem('cotiz_rejection_reasons', JSON.stringify(newReasons));
 
-            await updateEstadoTrabajo(trabajo.id, { estado: "Cotización Rechazada" });
+            const hasOtherApproved = cotizaciones.some(c => c.id !== quoteToReject && c.estado === 'Aprobada');
+            const targetRejectionState = hasOtherApproved ? "Cotización Aprobada" : "Cotización Rechazada";
+            await updateEstadoTrabajo(trabajo.id, { estado: targetRejectionState });
+            setTrabajo(prev => prev ? { ...prev, estado: targetRejectionState } : prev);
 
             // 2. Notificar al administrador con el motivo
             await createNotificacionByRole({
@@ -4827,7 +4868,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         }
         try {
             await updateCotizacionStatus(cotizParaRecotizar, "Rechazada");
-            await updateEstadoTrabajo(trabajo.id, { estado: "Recotización Solicitada" });
+            const hasOtherApproved = cotizaciones.some(c => c.id !== cotizParaRecotizar && c.estado === 'Aprobada');
+            const targetRecotizState = hasOtherApproved ? "Cotización Aprobada" : "Recotización Solicitada";
+            await updateEstadoTrabajo(trabajo.id, { estado: targetRecotizState });
 
             const targetCotiz = cotizaciones.find(c => c.id === cotizParaRecotizar);
             const cotizTitle = targetCotiz?.descripcion ? getQuoteTitle(targetCotiz.descripcion, `Cotización #${cotizParaRecotizar}`) : `Cotización #${cotizParaRecotizar}`;
@@ -4884,7 +4927,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             localStorage.setItem('cotiz_recotizacion_reasons', JSON.stringify(newRecotiz));
 
             setCotizaciones(prev => prev.map(c => c.id === cotizParaRecotizar ? { ...c, estado: "Rechazada" as const } : c));
-            setTrabajo((prev) => prev ? { ...prev, estado: "Recotización Solicitada" } : prev);
+            setTrabajo((prev) => prev ? { ...prev, estado: targetRecotizState } : prev);
             setShowRecotizModal(false);
             setRecotizMotivo('');
             setCotizParaRecotizar(null);
@@ -5345,22 +5388,31 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         const canEdit = isVisita && isTecnico;
         const categoryColor = getCategoryColor(tarea.titulo);
 
+        // Obtener cotización vinculada y filtrar conceptos/materiales aceptados por el cliente
+        const matchingQuote = getMatchingQuoteForTask(tarea, cotizaciones);
+        const acceptedItems = getAcceptedItemsForQuote(matchingQuote, trabajo?.id);
+        const filteredTask = filterTaskItemsByAccepted(tarea, acceptedItems);
+
+        const activeConceptos = filteredTask.conceptos;
+        const activeMateriales = filteredTask.materiales;
+        const activeRefacciones = filteredTask.refacciones;
+
         const handleOpenPDFPreview = (e: React.MouseEvent) => {
             e.stopPropagation();
 
-            // 1. Refacciones y materiales
-            const refaccionesList = (tarea.refacciones || []).map(r => ({
-                pieza: r.pieza,
+            // 1. Refacciones y materiales aceptados
+            const refaccionesList = (activeRefacciones || []).map((r: any) => ({
+                pieza: r.pieza || r.nombre,
                 amount: r.cantidad,
                 cantidad: Number(r.cantidad) || 1,
                 costo_estimado: r.costo_estimado ? String(r.costo_estimado) : ''
             }));
 
-            // 2. Conceptos de servicio
-            if (tarea.quoteData?.conceptos) {
-                tarea.quoteData.conceptos.forEach((c: any) => {
+            // 2. Conceptos de servicio aceptados
+            if (activeConceptos && activeConceptos.length > 0) {
+                activeConceptos.forEach((c: any) => {
                     refaccionesList.push({
-                        pieza: c.descripcion,
+                        pieza: c.descripcion || c.nombre,
                         amount: Number(c.cantidad) || 1,
                         cantidad: Number(c.cantidad) || 1,
                         costo_estimado: c.precio ? String(c.precio) : ''
@@ -5368,11 +5420,11 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                 });
             }
 
-            // 3. Materiales registrados
-            if (tarea.quoteData?.materiales) {
-                tarea.quoteData.materiales.forEach((m: any) => {
+            // 3. Materiales registrados y aceptados
+            if (activeMateriales && activeMateriales.length > 0) {
+                activeMateriales.forEach((m: any) => {
                     refaccionesList.push({
-                        pieza: m.nombre,
+                        pieza: m.nombre || m.material || m.pieza,
                         amount: Number(m.cantidad) || 1,
                         cantidad: Number(m.cantidad) || 1,
                         costo_estimado: m.precio ? String(m.precio) : ''
@@ -5499,20 +5551,30 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
         const parsedItems = materialsText ? parseMaterials(materialsText) : [];
 
         let totalPrice = 0;
-        if (tarea.quoteData?.conceptos) {
-            tarea.quoteData.conceptos.forEach((c: any) => {
-                totalPrice += (Number(c.cantidad) || 1) * (Number(c.precio) || 0);
-            });
-        }
-        if (tarea.quoteData?.materiales) {
-            tarea.quoteData.materiales.forEach((m: any) => {
-                totalPrice += (Number(m.cantidad) || 1) * (Number(m.precio) || 0);
-            });
-        }
-        if (tarea.refacciones) {
-            tarea.refacciones.forEach((r: any) => {
-                totalPrice += (Number(r.cantidad) || 1) * (Number(r.costo_estimado) || 0);
-            });
+        if (filteredTask && filteredTask.subtotal > 0) {
+            totalPrice = filteredTask.subtotal;
+        } else if (matchingQuote && Number(matchingQuote.monto) > 0) {
+            totalPrice = Number(matchingQuote.monto);
+        } else {
+            if (activeConceptos && activeConceptos.length > 0) {
+                activeConceptos.forEach((c: any) => {
+                    totalPrice += (Number(c.cantidad) || 1) * (Number(c.precio) || 0);
+                });
+            } else if (tarea.quoteData?.conceptos) {
+                tarea.quoteData.conceptos.forEach((c: any) => {
+                    totalPrice += (Number(c.cantidad) || 1) * (Number(c.precio) || 0);
+                });
+            }
+            if (activeMateriales && activeMateriales.length > 0) {
+                activeMateriales.forEach((m: any) => {
+                    totalPrice += (Number(m.cantidad) || 1) * (Number(m.precio) || 0);
+                });
+            }
+            if (activeRefacciones && activeRefacciones.length > 0) {
+                activeRefacciones.forEach((r: any) => {
+                    totalPrice += (Number(r.cantidad) || 1) * (Number(r.costo_estimado) || 0);
+                });
+            }
         }
 
         return (
@@ -5628,7 +5690,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         )}
                         {(() => {
                             const isTaskReportDone = isTaskReportFinalized(tarea);
-                            const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo?.id);
+                            const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo?.id).filter(t => cotizaciones.length === 0 || isTaskQuoteApproved(t, cotizaciones, rejectionReasons, recotizacionReasons));
                             const totalCount = execTasks.length || 1;
                             const doneCount = (trabajo?.estado === 'Finalizado' || trabajo?.estado === 'Completado')
                                 ? totalCount
@@ -5863,9 +5925,9 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         <span style={{ display: 'block', fontSize: '9px', textTransform: 'uppercase', color: '#64748b', fontWeight: '800', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
                             💼 Conceptos de Servicio
                         </span>
-                        {tarea.quoteData?.conceptos && tarea.quoteData.conceptos.length > 0 ? (
+                        {activeConceptos && activeConceptos.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                                {(tarea.quoteData?.conceptos || []).map((concept: any, idx: number) => (
+                                {activeConceptos.map((concept: any, idx: number) => (
                                     <div key={idx} style={{
                                         background: '#eff6ff',
                                         border: '1px solid #bfdbfe',
@@ -5880,7 +5942,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                         gap: '6px'
                                     }}>
                                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {concept.cantidad}x {concept.descripcion}
+                                            {concept.cantidad || 1}x {concept.descripcion || concept.nombre}
                                         </span>
                                         {concept.precio && (
                                             <span style={{ fontWeight: '800', color: '#1d4ed8', flexShrink: 0 }}>
@@ -5908,83 +5970,99 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                         <span style={{ display: 'block', fontSize: '9px', textTransform: 'uppercase', color: '#64748b', fontWeight: '800', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
                             🛠️ Refacciones y Materiales
                         </span>
-                        {((tarea.refacciones && tarea.refacciones.length > 0) || parsedItems.length > 0 || (tarea.quoteData?.materiales && tarea.quoteData.materiales.length > 0)) ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                                {(tarea.refacciones || []).map((ref, idx) => (
-                                    <div key={idx} style={{
-                                        background: '#f0fdf4',
-                                        border: '1px solid #bbf7d0',
-                                        color: '#166534',
-                                        padding: '4px 8px',
-                                        borderRadius: '6px',
+                        {(() => {
+                            const hasOriginalMaterials = Boolean(
+                                (tarea.refacciones && tarea.refacciones.length > 0) ||
+                                parsedItems.length > 0 ||
+                                (tarea.quoteData?.materiales && tarea.quoteData.materiales.length > 0)
+                            );
+                            const hasActiveMaterials = Boolean(
+                                (activeRefacciones && activeRefacciones.length > 0) ||
+                                (activeMateriales && activeMateriales.length > 0)
+                            );
+                            const wasCancelledByClient = hasOriginalMaterials && !hasActiveMaterials && acceptedItems !== null;
+
+                            if (hasActiveMaterials) {
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                                        {(activeRefacciones || []).map((ref: any, idx: number) => (
+                                            <div key={`ref-${idx}`} style={{
+                                                background: '#f0fdf4',
+                                                border: '1px solid #bbf7d0',
+                                                color: '#166534',
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                fontSize: '11px',
+                                                fontWeight: '700',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: '6px'
+                                            }}>
+                                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {ref.cantidad || 1}x {ref.pieza || ref.nombre}
+                                                </span>
+                                                {ref.costo_estimado && (
+                                                    <span style={{ fontWeight: '800', flexShrink: 0 }}>
+                                                        ${ref.costo_estimado}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {(activeMateriales || []).map((ref: any, idx: number) => (
+                                            <div key={`quote-mat-${idx}`} style={{
+                                                background: '#f0fdf4',
+                                                border: '1px solid #bbf7d0',
+                                                color: '#166534',
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                fontSize: '11px',
+                                                fontWeight: '700',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: '6px'
+                                            }}>
+                                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {ref.cantidad || 1}x {ref.nombre || ref.material || ref.pieza}
+                                                </span>
+                                                {ref.precio && (
+                                                    <span style={{ fontWeight: '800', flexShrink: 0 }}>
+                                                        ${ref.precio}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            }
+
+                            if (wasCancelledByClient) {
+                                return (
+                                    <div style={{
+                                        background: '#fff1f2',
+                                        border: '1px dashed #fecdd3',
+                                        color: '#e11d48',
+                                        padding: '8px 10px',
+                                        borderRadius: '8px',
                                         fontSize: '11px',
                                         fontWeight: '700',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '6px'
+                                        gap: '6px',
+                                        marginTop: '4px'
                                     }}>
-                                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {ref.cantidad}x {ref.pieza}
-                                        </span>
-                                        {ref.costo_estimado && (
-                                            <span style={{ fontWeight: '800', flexShrink: 0 }}>
-                                                ${ref.costo_estimado}
-                                            </span>
-                                        )}
+                                        <span>🚫 Cancelado por el cliente</span>
                                     </div>
-                                ))}
-                                {(tarea.quoteData?.materiales || []).map((ref: any, idx: number) => (
-                                    <div key={`quote-mat-${idx}`} style={{
-                                        background: '#f0fdf4',
-                                        border: '1px solid #bbf7d0',
-                                        color: '#166534',
-                                        padding: '4px 8px',
-                                        borderRadius: '6px',
-                                        fontSize: '11px',
-                                        fontWeight: '700',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '6px'
-                                    }}>
-                                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {ref.cantidad}x {ref.nombre}
-                                        </span>
-                                        {ref.precio && (
-                                            <span style={{ fontWeight: '800', flexShrink: 0 }}>
-                                                ${ref.precio}
-                                            </span>
-                                        )}
-                                    </div>
-                                ))}
-                                {(!tarea.quoteData?.conceptos?.length && !tarea.quoteData?.materiales?.length) && parsedItems.map((ref, idx) => (<div key={`parsed-${idx}`} style={{
-                                    background: '#f0fdf4',
-                                    border: '1px solid #bbf7d0',
-                                    color: '#166534',
-                                    padding: '4px 8px',
-                                    borderRadius: '6px',
-                                    fontSize: '11px',
-                                    fontWeight: '700',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: '6px'
-                                }}>
-                                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {ref.cantidad}x {ref.material}
-                                    </span>
-                                    {ref.precio && (
-                                        <span style={{ fontWeight: '800', flexShrink: 0 }}>
-                                            {ref.precio}
-                                        </span>
-                                    )}
-                                </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '10px 0' }}>Sin materiales</span>
-                        )}
+                                );
+                            }
+
+                            return (
+                                <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '10px 0' }}>
+                                    Sin refacciones ni materiales
+                                </span>
+                            );
+                        })()}
                     </div>
                 </div>
 
@@ -6946,8 +7024,8 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                     <h3 className={styles.cardTitle}>Estado</h3>
                                 </div>
                                 <div className={styles.bentoContent} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', gap: '12px' }}>
-                                    <span className={styles.bentoValue} style={{ color: trabajo.estado === 'En Espera' ? '#2563eb' : '#d97706', fontSize: '16px', textAlign: 'center' }}>
-                                        {trabajo.estado === 'Asignado' && trabajo.tecnico && trabajo.tecnico !== "Sin asignar"
+                                    <span className={styles.bentoValue} style={{ color: (trabajo.tecnico && trabajo.tecnico !== "Sin asignar") ? '#059669' : (trabajo.estado === 'En Espera' ? '#2563eb' : '#d97706'), fontSize: '16px', textAlign: 'center' }}>
+                                        {trabajo.tecnico && trabajo.tecnico !== "Sin asignar" && (trabajo.estado === 'Asignado' || trabajo.estado === 'Cotización Rechazada' || trabajo.estado === 'Cotización Aceptada' || trabajo.estado === 'Cotización Aprobada' || trabajo.estado === 'En Proceso')
                                             ? `Asignado a: ${trabajo.tecnico}`
                                             : trabajo.estado === 'En Espera' && trabajo.tecnico && trabajo.tecnico !== "Sin asignar"
                                                 ? `Aceptado por: ${trabajo.tecnico}`
@@ -8503,7 +8581,28 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                                                                     {/* Fila 2: Monto y Acciones */}
                                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
-                                                                                        <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#1e293b' }}>${(Number(cotiz?.monto) || 0).toLocaleString('es-MX')}</p>
+                                                                                        {(() => {
+                                                                                            const acceptedList = getAcceptedItemsForQuote(cotiz, trabajo?.id);
+                                                                                            const hasAcceptedFilter = cotiz.estado === 'Aprobada' && acceptedList && acceptedList.length > 0;
+                                                                                            let displayMonto = Number(cotiz?.monto) || 0;
+                                                                                            if (hasAcceptedFilter) {
+                                                                                                const acceptedTotal = acceptedList.reduce((acc: number, it: any) => acc + ((Number(it.cantidad) || 1) * (Number(it.precio) || 0)), 0);
+                                                                                                if (acceptedTotal > 0) displayMonto = acceptedTotal;
+                                                                                            }
+
+                                                                                            return (
+                                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                                                    <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#1e293b' }}>
+                                                                                                        ${displayMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                                                                    </p>
+                                                                                                    {hasAcceptedFilter && (
+                                                                                                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: '6px', border: '1px solid #a7f3d0', width: 'fit-content' }}>
+                                                                                                            ✓ Monto Aprobado por Cliente ({acceptedList.length} ítems)
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            );
+                                                                                        })()}
                                                                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', maxWidth: '100%' }}>
                                                                                             <button onClick={() => { setCosto(cotiz.monto?.toString() || ''); setNotas(cotiz.descripcion || ''); setShowPDFPreview(true); }} style={{ padding: '7px 11px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', cursor: 'pointer', fontSize: '12px', fontWeight: '700', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}><HiOutlineDocumentText size={15} /> Vista previa del PDF</button>
                                                                                             {canEditCotizacion && (
@@ -10744,7 +10843,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                 {/* BANNER DE AVANCE PROGRESIVO DE REPORTES (ej. 1/7 Completados) */}
                                 {(() => {
-                                    const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo?.id);
+                                    const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo?.id).filter(t => cotizaciones.length === 0 || isTaskQuoteApproved(t, cotizaciones, rejectionReasons, recotizacionReasons));
                                     const total = execTasks.length || 1;
                                     const completed = execTasks.filter(t => isTaskReportFinalized(t)).length;
                                     const percentage = Math.round((completed / total) * 100);
@@ -10856,7 +10955,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                         {/* Actividades ya registradas */}
                                         {subTareas.length > 0 && (
                                             <div className={styles.taskList}>
-                                                {getExecutableTasks(subTareas).map(tarea => renderTaskCard(tarea, true))}
+                                                {getExecutableTasks(subTareas).filter(t => cotizaciones.length === 0 || isTaskQuoteApproved(t, cotizaciones, rejectionReasons, recotizacionReasons)).map(tarea => renderTaskCard(tarea, true))}
                                             </div>
                                         )}
                                     </div>
@@ -10865,7 +10964,31 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                 {/* Para trabajo normal (no SOS): muestra la lista existente de tareas desglosadas */}
                                 {!isSOS && (
                                     <div className={styles.taskList}>
-                                        {getExecutableTasks(subTareas).map(tarea => renderTaskCard(tarea, true))}
+                                        {(() => {
+                                            const approvedTasks = getExecutableTasks(subTareas).filter(t => cotizaciones.length === 0 || isTaskQuoteApproved(t, cotizaciones, rejectionReasons, recotizacionReasons));
+                                            if (approvedTasks.length === 0 && subTareas.length > 0) {
+                                                return (
+                                                    <div style={{
+                                                        background: '#fffbeb',
+                                                        border: '1.5px dashed #fde68a',
+                                                        borderRadius: '16px',
+                                                        padding: '32px 20px',
+                                                        textAlign: 'center',
+                                                        color: '#92400e',
+                                                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                                                    }}>
+                                                        <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px' }}>⏳</span>
+                                                        <p style={{ margin: 0, fontSize: '15px', fontWeight: '800' }}>
+                                                            No hay actividades autorizadas para ejecutar
+                                                        </p>
+                                                        <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#b45309' }}>
+                                                            Las propuestas de presupuesto están pendientes de aprobación o fueron rechazadas por el cliente.
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }
+                                            return approvedTasks.map(tarea => renderTaskCard(tarea, true));
+                                        })()}
                                     </div>
                                 )}
 
@@ -10884,7 +11007,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
 
                                 {/* Botones de acción del técnico al final de la pestaña Trabajo */}
                                 {((user?.role === 'tecnico' || user?.role === 'tecnico-normal' || user?.role === 'tecnico-autonomo') || user?.role === 'admin' || user?.role === 'autonomo') && (() => {
-                                    const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo?.id);
+                                    const execTasks = getExecutableTasks(subTareas, reporteFinal, trabajo?.id).filter(t => cotizaciones.length === 0 || isTaskQuoteApproved(t, cotizaciones, rejectionReasons, recotizacionReasons));
                                     const totalCount = execTasks.length || 1;
                                     const doneCount = execTasks.filter(t => isTaskReportFinalized(t)).length;
                                     const isAllDone = doneCount === totalCount && totalCount > 0;

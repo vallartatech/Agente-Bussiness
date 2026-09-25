@@ -131,3 +131,195 @@ export const filterQuoteDataForPoint = (quoteData: any, pIdx: number): any => {
         materiales: materiales || []
     };
 };
+
+/**
+ * Normaliza cadenas para comparación insensible a mayúsculas, acentos y caracteres especiales
+ */
+export const normalizeText = (text: string): string => (text || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+/**
+ * Extrae el título de una cotización almacenada en formato estructurado === TÍTULO: ... ===
+ */
+export const extractQuoteTitle = (desc: string, fallback: string = ''): string => {
+    if (desc && (desc.startsWith('=== TÍTULO:') || desc.startsWith('=== TITULO:'))) {
+        const parts = desc.split('===');
+        if (parts.length >= 3) {
+            return parts[1].replace(/T[ÍI]TULO:/i, '').trim();
+        }
+    }
+    return fallback;
+};
+
+/**
+ * Asocia de forma precisa una SubTarea o punto ejecutable con su respectiva Cotizacion
+ */
+export const getMatchingQuoteForTask = (tarea: any, cotizacionesList: any[]): any | null => {
+    if (!cotizacionesList || !Array.isArray(cotizacionesList) || cotizacionesList.length === 0) return null;
+    if (cotizacionesList.length === 1) return cotizacionesList[0];
+
+    const tDesc = normalizeText(tarea.cleanDescripcion || tarea.descripcion || '');
+    const tTitle = normalizeText(tarea.titulo || '');
+    const pIdx = tarea.pointIndex !== undefined ? Number(tarea.pointIndex) : null;
+
+    // 1. Coincidencia por título estructurado de la cotización
+    for (const c of cotizacionesList) {
+        const rawDesc = c.descripcion || '';
+        const qTitle = normalizeText(extractQuoteTitle(rawDesc, ''));
+
+        if (qTitle.length > 5) {
+            if (tDesc.includes(qTitle) || qTitle.includes(tDesc)) return c;
+            if (tTitle.includes(qTitle) || qTitle.includes(tTitle)) return c;
+        }
+
+        const parts = rawDesc.split('===');
+        const cleanDesc = normalizeText(parts[parts.length - 1] || rawDesc);
+        if (tDesc.length > 8 && (cleanDesc.includes(tDesc) || tDesc.includes(cleanDesc.slice(0, 30)))) {
+            return c;
+        }
+    }
+
+    // 2. Coincidencia por etiqueta [Punto X] en la cotización
+    if (pIdx !== null) {
+        const pRegex = new RegExp(`\\[?Punto\\s*#?${pIdx}\\]?`, 'i');
+        const pointMatch = cotizacionesList.find(c => pRegex.test(c.descripcion || ''));
+        if (pointMatch) return pointMatch;
+    }
+
+    // 3. Coincidencia posicional por índice de punto si el número coincide
+    if (pIdx !== null && pIdx > 0 && pIdx <= cotizacionesList.length) {
+        return cotizacionesList[pIdx - 1];
+    }
+
+    return null;
+};
+
+/**
+ * Obtiene la lista de ítems aceptados (conceptos y materiales) por el cliente para una cotización
+ */
+export const getAcceptedItemsForQuote = (quote: any, trabajoId?: number | string): any[] | null => {
+    if (!quote) return null;
+
+    // 1. Buscar en descripción con marcador persistente |||ACCEPTED_ITEMS|||
+    if (quote.descripcion && quote.descripcion.includes('|||ACCEPTED_ITEMS|||')) {
+        try {
+            const jsonPart = quote.descripcion.split('|||ACCEPTED_ITEMS|||')[1].trim();
+            const parsed = JSON.parse(jsonPart);
+            if (Array.isArray(parsed)) return parsed;
+        } catch (_) {}
+    }
+
+    // 2. Buscar en localStorage por id de cotización
+    if (quote.id) {
+        try {
+            const raw = localStorage.getItem(`quote_accepted_items_${quote.id}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch (_) {}
+    }
+
+    // 3. Fallback en localStorage por id de trabajo
+    if (trabajoId) {
+        try {
+            const raw = localStorage.getItem(`quote_accepted_items_${trabajoId}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch (_) {}
+    }
+
+    return null;
+};
+
+/**
+ * Determina si la cotización vinculada a una tarea fue aprobada / aceptada por el cliente.
+ * Si fue rechazada, está pendiente o en recotización, devuelve false.
+ */
+export const isTaskQuoteApproved = (
+    tarea: any,
+    cotizacionesList: any[],
+    rejectionReasonsMap?: Record<number, string>,
+    recotizacionReasonsMap?: Record<number, string>
+): boolean => {
+    if (!cotizacionesList || !Array.isArray(cotizacionesList) || cotizacionesList.length === 0) return true;
+
+    const matchingQuote = getMatchingQuoteForTask(tarea, cotizacionesList);
+    if (!matchingQuote) {
+        if (tarea.cotizacionEstado === 'Rechazada') return false;
+        return cotizacionesList.some(c => c.estado === 'Aprobada');
+    }
+
+    const qId = matchingQuote.id;
+    if (qId && recotizacionReasonsMap && recotizacionReasonsMap[qId]) return false;
+    if (qId && rejectionReasonsMap && rejectionReasonsMap[qId]) return false;
+
+    return matchingQuote.estado === 'Aprobada' || matchingQuote.estado === 'Aceptada';
+};
+
+/**
+ * Filtra conceptos y materiales de una tarea basándose en la selección del cliente al aceptar la cotización.
+ * Si el cliente desmarcó un material o concepto, se excluye de la lista activa y del subtotal.
+ */
+export const filterTaskItemsByAccepted = (
+    tarea: any,
+    acceptedItems: any[] | null
+): { conceptos: any[]; materiales: any[]; refacciones: any[]; subtotal: number } => {
+    let conceptos = tarea.quoteData?.conceptos || [];
+    let materiales = tarea.quoteData?.materiales || [];
+    let refacciones = tarea.refacciones || [];
+
+    if (!acceptedItems || !Array.isArray(acceptedItems)) {
+        let total = 0;
+        conceptos.forEach((c: any) => { total += (Number(c.cantidad) || 1) * (Number(c.precio) || 0); });
+        materiales.forEach((m: any) => { total += (Number(m.cantidad) || 1) * (Number(m.precio) || 0); });
+        refacciones.forEach((r: any) => { total += (Number(r.cantidad) || 1) * (Number(r.costo_estimado) || 0); });
+        return { conceptos, materiales, refacciones, subtotal: total };
+    }
+
+    const acceptedConceptsList = acceptedItems.filter((it: any) => it.tipo === 'concepto');
+    const acceptedMaterialsList = acceptedItems.filter((it: any) => it.tipo === 'material');
+
+    if (acceptedConceptsList.length > 0) {
+        conceptos = conceptos.filter((c: any) => {
+            const cName = normalizeText(c.descripcion || c.nombre || '');
+            return acceptedConceptsList.some((ac: any) => {
+                const acName = normalizeText(ac.nombre || '');
+                return cName.includes(acName) || acName.includes(cName);
+            });
+        });
+    }
+
+    if (acceptedMaterialsList.length > 0) {
+        materiales = materiales.filter((m: any) => {
+            const mName = normalizeText(m.nombre || m.material || m.pieza || '');
+            return acceptedMaterialsList.some((am: any) => {
+                const amName = normalizeText(am.nombre || am.material || '');
+                return mName.includes(amName) || amName.includes(mName);
+            });
+        });
+        refacciones = refacciones.filter((r: any) => {
+            const rName = normalizeText(r.pieza || r.nombre || '');
+            return acceptedMaterialsList.some((am: any) => {
+                const amName = normalizeText(am.nombre || am.material || '');
+                return rName.includes(amName) || amName.includes(rName);
+            });
+        });
+    } else {
+        // El cliente aceptó la cotización pero desmarcó todos los materiales
+        materiales = [];
+        refacciones = [];
+    }
+
+    let subtotal = 0;
+    conceptos.forEach((c: any) => { subtotal += (Number(c.cantidad) || 1) * (Number(c.precio) || 0); });
+    materiales.forEach((m: any) => { subtotal += (Number(m.cantidad) || 1) * (Number(m.precio) || 0); });
+    refacciones.forEach((r: any) => { subtotal += (Number(r.cantidad) || 1) * (Number(r.costo_estimado) || 0); });
+
+    return { conceptos, materiales, refacciones, subtotal };
+};
