@@ -128,7 +128,7 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
         }
     };
 
-    const handleOpenReportDetail = async (trabajoId: number) => {
+    const handleOpenReportDetail = async (trabajoId: number, customReportData?: any) => {
         try {
             setReporteModalOpen(true);
             setReporteData(null);
@@ -139,46 +139,55 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                 ? Number(String(trabajoId).replace('gen-', ''))
                 : trabajoId;
 
-            let reporte = null;
-            let jobDetails = null;
-
-            try {
-                reporte = await getReporteByTrabajoId(cleanId);
-            } catch (err: any) {
-                console.warn('No formal report found in DB, using fallback if available.');
-            }
-
-            if (reporte) {
-                let parsedSolucion = reporte.solucion;
-                if (typeof reporte.solucion === 'string') {
-                    try { parsedSolucion = JSON.parse(reporte.solucion); } catch (e) { console.error('Error al parsear reporte:', e); }
-                }
-                setReporteData(parsedSolucion || reporte);
-            } else {
-                const fallback = localStorage.getItem(`report_data_${cleanId}`);
-                if (fallback) setReporteData(JSON.parse(fallback));
-            }
-
+            let jobDetails: any = null;
             try {
                 jobDetails = await getTrabajo(cleanId);
             } catch (err) {
                 console.warn('Could not fetch job details for ID', cleanId);
             }
 
+            if (customReportData) {
+                setReporteData(customReportData);
+                setReporteTaskInfo({
+                    id: customReportData.dbId || customReportData.id || cleanId,
+                    titulo: customReportData.equipoInfo?.tipo || customReportData.tipoServicio || (customReportData.reporteTienda ? customReportData.reporteTienda.split('(')[0].trim() : '') || jobDetails?.titulo || 'Mantenimiento de Equipo',
+                    fecha: customReportData.fecha || (jobDetails?.created_at ? new Date(jobDetails.created_at).toLocaleDateString() : new Date().toLocaleDateString())
+                });
+            } else {
+                let reporte = null;
+                try {
+                    reporte = await getReporteByTrabajoId(cleanId);
+                } catch (err: any) {
+                    console.warn('No formal report found in DB, using fallback if available.');
+                }
+
+                if (reporte) {
+                    let parsedSolucion = reporte.solucion;
+                    if (typeof reporte.solucion === 'string') {
+                        try { parsedSolucion = JSON.parse(reporte.solucion); } catch (e) { console.error('Error al parsear reporte:', e); }
+                    }
+                    setReporteData(parsedSolucion || reporte);
+                } else {
+                    const fallback = localStorage.getItem(`report_data_${cleanId}`);
+                    if (fallback) setReporteData(JSON.parse(fallback));
+                }
+
+                setReporteTaskInfo({
+                    id: jobDetails?.id || cleanId,
+                    titulo: jobDetails?.titulo || 'Mantenimiento General',
+                    fecha: jobDetails?.created_at ? new Date(jobDetails.created_at).toLocaleDateString() : new Date().toLocaleDateString()
+                });
+            }
+
             if (jobDetails) {
                 setReporteTrabajo({
                     id: jobDetails.id,
                     sucursal: jobDetails.negocio?.nombre || businessName,
-                    tecnico: jobDetails.tecnico?.name || jobDetails.trabajador?.nombre || 'Técnico asignado',
+                    tecnico: (customReportData?.tecnicoNombre) || jobDetails.tecnico?.name || jobDetails.trabajador?.nombre || 'Técnico asignado',
                     encargado: jobDetails.contactos?.[0]?.nombre || jobDetails.negocio?.encargado || 'No asignado',
                     cotizacion: jobDetails.cotizacion_aceptada
                         ? { costo: jobDetails.cotizacion_aceptada.monto, archivo: jobDetails.cotizacion_aceptada.archivo_url, notas: jobDetails.cotizacion_aceptada.notas }
                         : jobDetails.cotizacion
-                });
-                setReporteTaskInfo({
-                    id: jobDetails.id,
-                    titulo: jobDetails.titulo || 'Mantenimiento General',
-                    fecha: new Date(jobDetails.created_at).toLocaleDateString()
                 });
             }
         } catch (error: any) {

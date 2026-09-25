@@ -13,7 +13,7 @@ export interface EquiposNegocioProps {
     businessAreas?: any[];
     solicitudesList?: any[];
     trabajosList?: any[];
-    onViewReport?: (trabajoId: number) => void;
+    onViewReport?: (trabajoId: number, reportData?: any) => void;
 }
 
 const extractEquipmentsFromAreas = (areas: any[]) => {
