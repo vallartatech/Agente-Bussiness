@@ -4459,15 +4459,14 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
             await updateCotizacionStatus(editingCotizacion.id, "Pendiente");
 
             if (trabajo?.id) {
-                await updateEstadoTrabajo(trabajo.id, { estado: "Cotización Enviada" });
-                setTrabajo(prev => prev ? { ...prev, estado: "Cotización Enviada" } : prev);
-
                 const fresh = await getCotizacionesByTrabajoId(trabajo.id);
-                if (Array.isArray(fresh) && fresh.length > 0) {
-                    setCotizaciones(fresh);
-                } else if (updated?.id) {
-                    setCotizaciones(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated, estado: 'Pendiente' as const } : c));
-                }
+                const currentList = Array.isArray(fresh) && fresh.length > 0 ? fresh : cotizaciones.map(c => c.id === editingCotizacion.id ? { ...c, ...updated, estado: 'Pendiente' as const } : c);
+                const hasApproved = currentList.some(c => (c.estado === 'Aprobada' || c.estado === 'Aceptada'));
+                const targetJobState = hasApproved ? "Cotización Aceptada" : "Cotización Enviada";
+
+                await updateEstadoTrabajo(trabajo.id, { estado: targetJobState });
+                setTrabajo(prev => prev ? { ...prev, estado: targetJobState } : prev);
+                setCotizaciones(currentList);
             } else if (updated?.id) {
                 setCotizaciones(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated, estado: 'Pendiente' as const } : c));
             }
@@ -8281,8 +8280,10 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                     const isEditing = editingCotizacion?.id === cotiz.id;
                                                                     const estadoBadge: Record<string, string> = { Pendiente: '#fffbeb', Aprobada: '#ecfdf5', Rechazada: '#fef2f2' };
                                                                     const estadoText: Record<string, string> = { Pendiente: '#92400e', Aprobada: '#065f46', Rechazada: '#7f1d1d' };
-                                                                    const displayEstado = (trabajo?.estado === 'Cotización Aceptada') ? 'Aprobada' : (cotiz.estado || 'Pendiente');
-                                                                    const displayEstadoText = (trabajo?.estado === 'Cotización Aceptada') ? 'Aceptada' : (cotiz.estado || 'Pendiente');
+                                                                    const isApproved = cotiz.estado === 'Aprobada' || cotiz.estado === 'Aceptada';
+                                                                    const isRejected = cotiz.estado === 'Rechazada';
+                                                                    const displayEstado = isApproved ? 'Aprobada' : isRejected ? 'Rechazada' : 'Pendiente';
+                                                                    const displayEstadoText = isApproved ? 'Aceptada' : isRejected ? 'Re-Cotizar / Rechazada' : 'Pendiente de revisión';
                                                                     return (
                                                                         <div key={cotiz.id} style={{
                                                                             background: cotiz.estado === 'Rechazada' ? '#fff5f5' : '#fafafa',
@@ -8490,7 +8491,7 @@ const DetalleTrabajoUnificado: React.FC<{ config: DetalleTrabajoConfig }> = ({ c
                                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
                                                                                         <p style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#1e293b' }}>${(Number(cotiz?.monto) || 0).toLocaleString('es-MX')}</p>
                                                                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', maxWidth: '100%' }}>
-                                                                                            <button onClick={() => { setCosto(cotiz.monto?.toString() || ''); setNotas(cotiz.descripcion || ''); setShowPDFPreview(true); }} style={{ padding: '7px 11px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', cursor: 'pointer', fontSize: '12px', fontWeight: '700', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}><HiOutlineDocumentText size={15} /> Preview PDF</button>
+                                                                                            <button onClick={() => { setCosto(cotiz.monto?.toString() || ''); setNotas(cotiz.descripcion || ''); setShowPDFPreview(true); }} style={{ padding: '7px 11px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', cursor: 'pointer', fontSize: '12px', fontWeight: '700', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}><HiOutlineDocumentText size={15} /> Vista previa del PDF</button>
                                                                                             {canEditCotizacion && (
                                                                                                 <>
                                                                                                     <button onClick={() => handleEditarCotizacion(cotiz)} style={{ padding: '7px 11px', borderRadius: '10px', background: cotiz.estado === 'Rechazada' ? 'linear-gradient(135deg, #f26522, #d14d13)' : '#f1f5f9', color: cotiz.estado === 'Rechazada' ? '#fff' : '#475569', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>
