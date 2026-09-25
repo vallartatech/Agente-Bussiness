@@ -219,7 +219,7 @@ const MenuLayout: React.FC = () => {
                 if (path === "/menu" || path === "/menu/") setActiveOption("Negocios");
                 else if (path.includes("dashboard")) setActiveOption("Dashboard");
                 else if (path.includes("inventario-general")) setActiveOption("Inventario General");
-                else if (path.includes("trabajadores")) setActiveOption("Trabajadores");
+                else if (path.includes("trabajador")) setActiveOption("Trabajadores");
                 else if (path.includes("usuarios")) setActiveOption("Usuarios");
                 else if (path.includes("solicitudes")) setActiveOption("Solicitudes");
                 else if (path.includes("mantenimiento")) setActiveOption("Mantenimientos");
@@ -228,7 +228,7 @@ const MenuLayout: React.FC = () => {
             } else if (path.startsWith("/autonomo")) {
                 if (path === "/autonomo" || path === "/autonomo/" || path.includes("dashboard")) setActiveOption("Mi Dashboard");
                 else if (path.includes("negocios") || path.includes("perfil-empresa")) setActiveOption("Mis Sucursales");
-                else if (path.includes("trabajadores")) setActiveOption("Mis Técnicos");
+                else if (path.includes("trabajador") || path.includes("tecnico")) setActiveOption("Mis Técnicos");
                 else if (path.includes("usuarios")) setActiveOption("Usuarios");
                 else if (path.includes("solicitudes")) setActiveOption("Solicitudes");
                 else if (path.includes("historial")) setActiveOption("Historial");
@@ -338,6 +338,10 @@ const MenuLayout: React.FC = () => {
                 else if (normalizeRole(user?.role) === 'tecnico-autonomo') navigate("/tecnico-autonomo");
                 else navigate(-1);
             }
+        } else if (location.pathname.includes("/trabajador/")) {
+            if (normalizeRole(user?.role) === 'admin') navigate("/menu/trabajadores");
+            else if (normalizeRole(user?.role) === 'autonomo' || normalizeRole(user?.role) === 'propietario-autonomo' || normalizeRole(user?.role) === 'administrador-general') navigate("/autonomo/trabajadores");
+            else navigate(-1);
         } else {
             navigate(-1);
         }

@@ -181,7 +181,7 @@ const AutonomoListaNegocios: React.FC = () => {
                         const negocioJobs = globalJobs.filter((j: any) => Number(j.negocio_id) === Number(negocio.id));
 
                         return (
-                            <div style={{ position: 'sticky', top: `calc(10px + ${index * 14}px)`, zIndex: index, paddingBottom: '10px' }} key={negocio.id}>
+                            <div key={negocio.id}>
                                 <div
                                     className={styles.jobCard}
                                     onClick={() => handleCardClick(negocio.id)}
@@ -247,15 +247,7 @@ const AutonomoListaNegocios: React.FC = () => {
                                             <p className={negocio.status === 'Finalizado' ? styles.estadoFinalizado : styles.estadoPendiente}>
                                                 Estado: {negocio.estado_geografico}
                                             </p>
-
-                                            {/* ALERTA DE COTIZACIÓN - Solo visible para Admin/Cliente, no para técnico */}
-                                            {globalJobs.some(j => j.negocio_id === negocio.id && (j.estado || "").toLowerCase().includes("cotizaci")) && (
-                                                <div className={styles.quoteBadge} style={{ marginTop: '10px' }}>
-                                                    💰 Cotización Recibida
-                                                </div>
-                                            )}
                                         </div>
-
 
                                         <div className={`${styles.cardIndicator} ${negocio.status === 'Finalizado' ? styles.blue : ''}`}></div>
                                     </div>

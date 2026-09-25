@@ -201,6 +201,25 @@ export const getMergedIntervenciones = (equipo: any, solicitudes: any[] = [], tr
         }
     });
 
+    const parseDate = (dStr: string) => {
+        if (!dStr) return 0;
+        const parts = dStr.includes("/") ? dStr.split("/") : dStr.split("-");
+        if (parts.length === 3) {
+            const [d, m, y] = parts.map(Number);
+            return new Date(y, m - 1, d).getTime();
+        }
+        const d = new Date(dStr);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+
+    merged.sort((a, b) => {
+        const aFin = ['Finalizado', 'Completado', 'Finalizada', 'Terminado', 'Cancelado'].includes(a.estado);
+        const bFin = ['Finalizado', 'Completado', 'Finalizada', 'Terminado', 'Cancelado'].includes(b.estado);
+        if (!aFin && bFin) return -1;
+        if (aFin && !bFin) return 1;
+        return parseDate(b.created_at || b.fecha || b.fechaSolicitud) - parseDate(a.created_at || a.fecha || a.fechaSolicitud);
+    });
+
     return merged;
 };
 

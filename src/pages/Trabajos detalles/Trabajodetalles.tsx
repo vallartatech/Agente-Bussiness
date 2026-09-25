@@ -342,42 +342,39 @@ const TrabajoDetalle: React.FC = () => {
         });
 
         const parseDateForSort = (dateStr: string) => {
+            if (!dateStr) return 0;
             const parts = dateStr.includes("/") ? dateStr.split("/") : dateStr.split("-");
             if (parts.length === 3) {
                 const [d, m, y] = parts.map(Number);
                 return new Date(y, m - 1, d).getTime();
             }
-            return new Date(dateStr).getTime();
+            const parsed = new Date(dateStr).getTime();
+            return isNaN(parsed) ? 0 : parsed;
         };
 
+        const isJobFinalized = (j: Trabajo) => j.estado === "Finalizado" || j.estado === "Completado" || j.estado === "Cancelado";
+
         const sortedFilteredJobs = [...singleJobsList].sort((a, b) => {
-            if (a.tipo === "SOS" && b.tipo !== "SOS") return -1;
-            if (a.tipo !== "SOS" && b.tipo === "SOS") return 1;
+            // 1. SOS primero
+            const aIsSOS = a.tipo === "SOS" || a.prioridad === "Alta";
+            const bIsSOS = b.tipo === "SOS" || b.prioridad === "Alta";
+            if (aIsSOS && !bIsSOS) return -1;
+            if (!aIsSOS && bIsSOS) return 1;
+
+            // 2. Finalizados al final (abajo)
+            const aFinalizado = isJobFinalized(a);
+            const bFinalizado = isJobFinalized(b);
+            if (!aFinalizado && bFinalizado) return -1;
+            if (aFinalizado && !bFinalizado) return 1;
+
+            // 3. Dentro de cada categoría, ordenar por fecha descendente (más recientes primero)
             return parseDateForSort(b.fecha) - parseDateForSort(a.fecha);
         });
 
-        sortedFilteredJobs.forEach(job => {
-            const dateKey = job.fecha;
-            if (!groups[dateKey]) groups[dateKey] = [];
-            groups[dateKey].push(job);
-        });
-        return groups;
+        return sortedFilteredJobs;
     };
 
-    const groupedJobs = getGroupedJobs();
-    const sortedDates = Object.keys(groupedJobs).sort((a, b) => {
-        const parseDate = (dateStr: string) => {
-            const parts = dateStr.includes("/") ? dateStr.split("/") : dateStr.split("-");
-            if (parts.length === 3) {
-                const [d, m, y] = parts.map(Number);
-                return new Date(y, m - 1, d).getTime();
-            }
-            return new Date(dateStr).getTime();
-        };
-        return parseDate(b) - parseDate(a);
-    });
-
-    const flatJobs = sortedDates.flatMap(date => groupedJobs[date]);
+    const flatJobs = getGroupedJobs();
 
     // ─────────────────────────────────────────────────────────────────────────
     // Handlers
