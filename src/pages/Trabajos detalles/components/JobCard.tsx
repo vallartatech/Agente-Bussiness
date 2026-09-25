@@ -221,37 +221,28 @@ const JobCard: React.FC<JobCardProps> = ({
                 <div className={styles.cardContent}>
                     <div className={styles.cardLeftDetails}>
 
-                        {/* Fechas y badge NUEVO */}
+                        {/* Fechas y badges de encabezado */}
                         <div className={styles.headerRow}>
-                            <div className={styles.dateGroup} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                            <div className={styles.dateGroup}>
                                 {!isCardSeen(userRole, trabajo.id, trabajo.estado) && (
                                     <span className={styles.newBadgeMini} style={{ background: seenAccent.grad, boxShadow: `0 2px 8px ${seenAccent.shadow}` }}>
                                         {seenAccent.dot} NUEVO
                                     </span>
                                 )}
                                 {items.length > 1 && (
-                                    <span style={{
-                                        background: '#e0f2fe',
-                                        color: '#0369a1',
-                                        border: '1px solid #bae6fd',
-                                        padding: '2px 8px',
-                                        borderRadius: '6px',
-                                        fontSize: '11px',
-                                        fontWeight: '800',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                    }}>
+                                    <span className={styles.loteBadge}>
                                         📦 Solicitud en Lote ({items.length} servicios)
                                     </span>
                                 )}
-                                <p className={styles.strikingDate} style={{ margin: 0 }}>
-                                    📅 Cita solicitada: {trabajo.fechaAsignada || trabajo.fecha}
-                                </p>
+                                {(trabajo.fechaAsignada || trabajo.fecha) && (
+                                    <span className={styles.strikingDate}>
+                                        📅 Cita solicitada: {trabajo.fechaAsignada || trabajo.fecha}
+                                    </span>
+                                )}
                                 {(trabajo as any).hora_llegada && (
-                                    <p className={styles.technicianArrivalTag} style={{ margin: 0 }}>
-                                        📍 Técnico en sitio (Llegada: {(trabajo as any).hora_llegada})
-                                    </p>
+                                    <span className={styles.technicianArrivalTag}>
+                                        📍 Técnico en sitio ({(trabajo as any).hora_llegada})
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -263,9 +254,25 @@ const JobCard: React.FC<JobCardProps> = ({
                             </h3>
 
                             <div className={styles.descriptionBox}>
-                                <p>
-                                    {currentItem.descripcion?.replace(/\[Grupo:\s*REQ-\d+\]\s*\n?/, '') || 'Servicio solicitado sin descripción adicional.'}
-                                </p>
+                                {(() => {
+                                    const rawDesc = currentItem.descripcion?.replace(/\[Grupo:\s*REQ-\d+\]\s*\n?/, '') || '';
+                                    const eqMatch = rawDesc.match(/\[Equipo:\s*([^\]]+)\]/i);
+                                    const eqText = eqMatch ? eqMatch[1] : null;
+                                    const cleanDesc = rawDesc.replace(/\[Equipo:\s*[^\]]+\]\s*\n?/i, '').trim();
+
+                                    return (
+                                        <>
+                                            {eqText && (
+                                                <div className={styles.equipmentInlineTag}>
+                                                    ⚙️ <strong>Equipo:</strong> {eqText}
+                                                </div>
+                                            )}
+                                            <p>
+                                                {cleanDesc || 'Servicio solicitado sin descripción adicional.'}
+                                            </p>
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {/* Cotización */}
