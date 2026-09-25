@@ -18,7 +18,7 @@ interface HistorialEquipoModalProps {
     onClose: () => void;
     equipo: any;
     historial: any[];
-    onViewReport?: (trabajoId: number) => void;
+    onViewReport?: (trabajoId: number, reportData?: any) => void;
 }
 
 const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onClose, equipo, historial, onViewReport }) => {
@@ -242,7 +242,7 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                 ? subData.refaccionesList.map((r: any) => `${r.cantidad || 1}x ${r.pieza || r.nombre || r.material}`).join(' · ')
                                 : '';
                             
-                            rawList.push({
+                            const reportItem = {
                                 id: sourceJobId,
                                 subId: subKey,
                                 titulo: subData.equipoInfo?.tipo || subData.tipoServicio || (subData.reporteTienda ? subData.reporteTienda.split('(')[0].trim() : '') || 'Mantenimiento de Equipo',
@@ -253,8 +253,25 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                 imagenes: subData.imagenes || null,
                                 observacionesList: subData.observacionesList || [],
                                 tecnico: subData.tecnicoNombre || p.tecnicoNombre || req.tecnico?.name || 'Técnico asignado',
-                                fecha: subData.fecha || p.fecha || null
-                            });
+                                fecha: subData.fecha || p.fecha || null,
+                                rawReport: {
+                                    ...subData,
+                                    id: sourceJobId,
+                                    dbId: p.dbId,
+                                    trabajoId: sourceJobId,
+                                    equipoInfo: subData.equipoInfo || {
+                                        tipo: subData.tipoServicio || 'Mantenimiento',
+                                        marca: equipo.marca || 'N/A',
+                                        modelo: equipo.modelo || 'N/A',
+                                        nombre: equipo.nombre || 'N/A',
+                                        serie: equipo.serie || 'S/N'
+                                    },
+                                    firmaEmpresa: subData.firmaEmpresa || p.firmaEmpresa,
+                                    tecnicoNombre: subData.tecnicoNombre || p.tecnicoNombre || req.tecnico?.name,
+                                    fecha: subData.fecha || p.fecha
+                                }
+                            };
+                            rawList.push(reportItem);
                         }
                     }
                 });
@@ -265,7 +282,7 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                         ? p.refaccionesList.map((r: any) => `${r.cantidad || 1}x ${r.pieza || r.nombre || r.material}`).join(' · ')
                         : '';
 
-                    rawList.push({
+                    const reportItem = {
                         id: sourceJobId,
                         titulo: p.equipoInfo?.tipo || p.tipoServicio || 'Informe Técnico',
                         problema_cliente: p.reporteTienda || p.hallazgo || req.descripcion_problema || req.descripcion || '—',
@@ -275,8 +292,22 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                         imagenes: p.imagenes || null,
                         observacionesList: p.observacionesList || [],
                         tecnico: p.tecnicoNombre || req.tecnico?.name || 'Técnico asignado',
-                        fecha: p.fecha || null
-                    });
+                        fecha: p.fecha || null,
+                        rawReport: {
+                            ...p,
+                            id: sourceJobId,
+                            dbId: p.dbId,
+                            trabajoId: sourceJobId,
+                            equipoInfo: p.equipoInfo || {
+                                tipo: p.tipoServicio || 'Mantenimiento',
+                                marca: equipo.marca || 'N/A',
+                                modelo: equipo.modelo || 'N/A',
+                                nombre: equipo.nombre || 'N/A',
+                                serie: equipo.serie || 'S/N'
+                            }
+                        }
+                    };
+                    rawList.push(reportItem);
                 }
             }
         });
@@ -618,7 +649,7 @@ const HistorialEquipoModal: React.FC<HistorialEquipoModalProps> = ({ isOpen, onC
                                                                                 || (req.isJob || (!req.levantamiento_equipo_id && !req.reparacion_trabajo_id && !req.visita_trabajo_id) ? req.id : null);
                                                                             if (rawTargetId) {
                                                                                 const targetId = Number(String(rawTargetId).replace('m-', '').replace('gen-', ''));
-                                                                                onViewReport(targetId);
+                                                                                onViewReport(targetId, finalReports[0]?.rawReport || finalReports[0]);
                                                                             }
                                                                         }}
                                                                         style={{

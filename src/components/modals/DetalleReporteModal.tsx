@@ -7,9 +7,11 @@ interface DetalleReporteModalProps {
     isOpen: boolean;
     onClose: () => void;
     trabajoId: number;
+    reporteData?: any;
+    equipo?: any;
 }
 
-const DetalleReporteModal: React.FC<DetalleReporteModalProps> = ({ isOpen, onClose, trabajoId }) => {
+const DetalleReporteModal: React.FC<DetalleReporteModalProps> = ({ isOpen, onClose, trabajoId, reporteData, equipo }) => {
     const [loading, setLoading] = useState(true);
     const [trabajo, setTrabajo] = useState<any>(null);
     const [reporte, setReporte] = useState<any>(null);
@@ -28,48 +30,55 @@ const DetalleReporteModal: React.FC<DetalleReporteModalProps> = ({ isOpen, onClo
                 const formattedTrabajo = {
                     id: jobData.id,
                     sucursal: jobData.negocio?.nombre || 'N/A',
-                    tecnico: jobData.trabajador?.nombre || 'No asignado',
-                    encargado: jobData.negocio?.encargado || 'N/A',
+                    tecnico: jobData.trabajador?.nombre || jobData.tecnico?.name || 'No asignado',
+                    encargado: jobData.negocio?.encargado || jobData.contactos?.[0]?.nombre || 'N/A',
                     cotizacion: jobData.cotizacion ? {
-                        costo: jobData.cotizacion.costo_estimado,
-                        notas: jobData.cotizacion.notas_cliente,
-                        archivo: jobData.cotizacion.archivo_presupuesto
+                        costo: jobData.cotizacion.costo_estimado || jobData.cotizacion.monto,
+                        notas: jobData.cotizacion.notas_cliente || jobData.cotizacion.notas,
+                        archivo: jobData.cotizacion.archivo_presupuesto || jobData.cotizacion.archivo_url
                     } : undefined
                 };
 
                 const formattedTask = {
-                    id: jobData.id,
-                    titulo: jobData.titulo,
-                    fecha: jobData.fecha_programada || new Date(jobData.created_at).toLocaleDateString()
+                    id: reporteData?.dbId || reporteData?.id || jobData.id,
+                    titulo: reporteData?.equipoInfo?.tipo || reporteData?.tipoServicio || jobData.titulo || 'Mantenimiento de Equipo',
+                    fecha: reporteData?.fecha || jobData.fecha_programada || new Date(jobData.created_at).toLocaleDateString()
                 };
 
                 setTrabajo(formattedTrabajo);
                 setTaskInfo(formattedTask);
 
-                // 2. Obtener datos del reporte
-                const reportRes = await getReporteByTrabajoId(trabajoId);
-                if (reportRes && reportRes.solucion) {
-                    try {
-                        const parsed = JSON.parse(reportRes.solucion);
-                        // Añadir el id de la DB si no lo tiene el JSON
-                        setReporte({ ...parsed, dbId: reportRes.id });
-                    } catch (e) {
-                        setReporte({
-                            id: reportRes.id,
-                            descripcion: reportRes.descripcion,
-                            fecha: reportRes.fecha
-                        });
+                // 2. Si ya viene el reporte específico (ej. desde bitácora de equipo), usarlo directamente
+                if (reporteData) {
+                    setReporte(reporteData);
+                } else {
+                    // 3. Obtener datos del reporte desde BD
+                    const reportRes = await getReporteByTrabajoId(trabajoId);
+                    if (reportRes && reportRes.solucion) {
+                        try {
+                            const parsed = JSON.parse(reportRes.solucion);
+                            setReporte({ ...parsed, dbId: reportRes.id });
+                        } catch (e) {
+                            setReporte({
+                                id: reportRes.id,
+                                descripcion: reportRes.descripcion,
+                                fecha: reportRes.fecha
+                            });
+                        }
                     }
                 }
             } catch (error) {
                 console.error("Error fetching report details:", error);
+                if (reporteData) {
+                    setReporte(reporteData);
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchData();
-    }, [isOpen, trabajoId]);
+    }, [isOpen, trabajoId, reporteData]);
 
     if (!isOpen) return null;
 

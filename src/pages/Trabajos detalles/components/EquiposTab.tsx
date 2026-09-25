@@ -101,6 +101,7 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
     const [equiposForSelection, setEquiposForSelection] = useState<any[]>([]);
     const [selectedEqForBitacora, setSelectedEqForBitacora] = useState<any>(null);
     const [selectedTrabajoIdForBitacora, setSelectedTrabajoIdForBitacora] = useState<number | null>(null);
+    const [selectedReportDataForBitacora, setSelectedReportDataForBitacora] = useState<any>(null);
     const [reporteModalOpenForBitacora, setReporteModalOpenForBitacora] = useState(false);
 
     // Reporte detallado (abierto desde EquiposNegocio)
@@ -413,14 +414,23 @@ const EquiposTab: React.FC<EquiposTabProps> = ({
                 onClose={() => setBitacoraModalOpen(false)}
                 equipo={selectedEqForBitacora}
                 historial={selectedEqForBitacora ? getMergedIntervenciones(selectedEqForBitacora, allSolicitudes, trabajosData) : []}
-                onViewReport={(trabajoId) => { setSelectedTrabajoIdForBitacora(trabajoId); setReporteModalOpenForBitacora(true); }}
+                onViewReport={(trabajoId, reportData) => { 
+                    setSelectedTrabajoIdForBitacora(trabajoId); 
+                    setSelectedReportDataForBitacora(reportData); 
+                    setReporteModalOpenForBitacora(true); 
+                }}
             />
 
             {selectedTrabajoIdForBitacora && (
                 <DetalleReporteModal
                     isOpen={reporteModalOpenForBitacora}
-                    onClose={() => setReporteModalOpenForBitacora(false)}
+                    onClose={() => {
+                        setReporteModalOpenForBitacora(false);
+                        setSelectedReportDataForBitacora(null);
+                    }}
                     trabajoId={selectedTrabajoIdForBitacora}
+                    reporteData={selectedReportDataForBitacora}
+                    equipo={selectedEqForBitacora}
                 />
             )}
 
